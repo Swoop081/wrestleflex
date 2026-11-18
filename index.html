@@ -42,6 +42,9 @@ html,body{margin:0;width:100%;height:100%;position:fixed;overflow:hidden;overscr
 .card.old{filter:brightness(.62)}
 .card.win{box-shadow:0 0 20px #2fb5a3}
 .card.lose{opacity:.6}
+.card .dmg small{font-size:9px;letter-spacing:.06em;margin-left:3px;font-family:Inter,system-ui,sans-serif;font-weight:700;opacity:.8}
+.card .dfn{font-size:12px;font-weight:800;letter-spacing:.06em;text-align:center;color:#7fc4ff;min-height:14px}
+.card.ph .dfn{text-shadow:0 1px 4px rgba(0,0,0,.9)}
 .card .ab{font-size:7.5px;font-weight:700;letter-spacing:.04em;text-align:center;color:#ffd25a;line-height:1.1;min-height:9px}
 .card.boost{box-shadow:0 0 18px #ffd25a}
 .card.boost .dmg{color:#ffd25a}
@@ -181,7 +184,7 @@ var W = [
   {id:'punk',  name:'CM Punk',      short:'PUNK',   init:'CP', hue:285, img:null, mate:'Danhausen'},
   {id:'austin',name:'Stone Cold Steve Austin', short:'AUSTIN', init:'SA', hue:45, img:null, mate:'Dude Love'}
 ];
-var MATE_VALS = [5,4,3,2,1,0,3];  /* minion numbers, 0-5; fewer minions keep the strongest */
+var MATE_PAIRS = [[5,0],[4,1],[3,2],[2,3],[1,4],[0,5],[3,3]];  /* minion [attack, defense], 0-5 */
 var ACTS = [
   {act:'kick', name:'KICK OUT',  sym:'✖', txt:'CANCELS BOTH CARDS'},
   {act:'rev',  name:'REVERSAL',  sym:'↺', txt:'ANSWER: THEIR HIT HITS THEM'},
@@ -195,7 +198,7 @@ var AB = {
   lead:   '+1 WHEN LEADING'
 };
 var METER_MAX = 3, METER_BONUS = 2;
-var STAR_DMG = 10, START_HP = 30, STEP = 4.85;
+var STAR_DMG = 10, STAR_DEF = 5, START_HP = 30, STEP = 4.85;
 var wById = {}; W.forEach(function (w) { wById[w.id] = w; });
 
 /* ---------- helpers ---------- */
@@ -245,16 +248,17 @@ window.addEventListener('orientationchange', function () { setTimeout(fit, 150);
 /* ---------- cards ---------- */
 var uid = 0;
 function mk(base) { base.uid = ++uid; return base; }
-function starCard(w) { return mk({star:true, ab:w.sab, dmg:STAR_DMG, name:w.short, hue:w.hue, init:w.init, img:w.img}); }
+function starCard(w) { return mk({star:true, ab:w.sab, dmg:STAR_DMG, def:STAR_DEF, name:w.short, hue:w.hue, init:w.init, img:w.img}); }
 function buildHand(w, copies) {
   var cards = [];
   for (var i = 0; i < copies; i++) cards.push(starCard(w));
   var nAct = Math.min(2, 8 - copies), pool = shuffle(ACTS.slice());
   for (var k = 0; k < nAct; k++) {
     var a = pool[k];
-    cards.push(mk({star:false, act:a.act, dmg:0, sym:a.sym, abTxt:a.txt, name:a.name, hue:0, init:'!'}));
+    cards.push(mk({star:false, act:a.act, dmg:0, def:0, sym:a.sym, abTxt:a.txt, name:a.name, hue:0, init:'!'}));
   }
-  for (var j = 0; j < 8 - copies - nAct; j++) cards.push(mk({star:false, ab:w.mab, dmg:MATE_VALS[j], name:w.mate, hue:0, init:w.mate.charAt(0)}));
+  var pairs = shuffle(MATE_PAIRS.slice());
+  for (var j = 0; j < 8 - copies - nAct; j++) cards.push(mk({star:false, ab:w.mab, dmg:pairs[j][0], def:pairs[j][1], name:w.mate, hue:0, init:w.mate.charAt(0)}));
   return shuffle(cards);
 }
 function cardVars(c) {
@@ -264,8 +268,8 @@ function cardVars(c) {
     : '--bd:#4a5378;--bg2:#1e2336;--ink2:#e8ebf5';
 }
 function faceHTML(c) {
-  return '<div class="top"><span class="dmg">' + (c.act ? c.sym : c.dmg) + '</span><span class="tag">' + (c.star ? 'STAR' : (c.act ? 'ACTION' : 'MINION')) + '</span></div>' +
-         '<div class="art">' + (c.star ? c.init : '') + '</div><div class="ab">' + (c.abTxt || AB[c.ab] || '') + '</div><div class="nm">' + c.name.toUpperCase() + '</div>';
+  return '<div class="top"><span class="dmg">' + (c.act ? c.sym : c.dmg + '<small>ATK</small>') + '</span><span class="tag">' + (c.star ? 'STAR' : (c.act ? 'ACTION' : 'MINION')) + '</span></div>' +
+         '<div class="art">' + (c.star ? c.init : '') + '</div><div class="dfn">' + (c.act ? '' : 'DEF ' + c.def) + '</div><div class="ab">' + (c.abTxt || AB[c.ab] || '') + '</div><div class="nm">' + c.name.toUpperCase() + '</div>';
 }
 function mkEl(c, w, h, back) {
   var e = document.createElement('div');
@@ -417,7 +421,7 @@ function effOf(side, c, role) {
 }
 function showEff(el, c) {
   if (c.act) return;
-  var d = el.querySelector('.dmg'); if (d) d.textContent = c.eff;
+  var d = el.querySelector('.dmg'); if (d) d.innerHTML = c.eff + '<small>ATK</small>';
   if (c.boosted) el.classList.add('boost');
 }
 async function fly(c, side) {
@@ -459,31 +463,30 @@ function aiLead() {
   var rec = actIn(all, 'rec'), mom = actIn(all, 'mom');
   if (rec && M.hp.o <= START_HP - 8 && r < 0.6) return rec;
   if (mom && M.round <= 5 && r < 0.3) return mom;
-  var hand = nums(all).sort(function (a, b) { return (a.dmg + abBonus(a, 'lead')) - (b.dmg + abBonus(b, 'lead')); });
+  var hand = nums(all).sort(function (a, b) { return (a.dmg + a.def) - (b.dmg + b.def); });
   r = Math.random();
   if (r < 0.5 || hand.length === 1) return hand[0];
-  if (r < 0.8) return hand[Math.max(0, hand.length - 2)];
-  return hand[rand(0, hand.length - 1)];
+  if (r < 0.8) return hand[rand(0, hand.length - 1)];
+  return hand[hand.length - 1];
 }
-function aiAnswer(leadEff) {
+function aiAnswer(lc) {
   var all = M.oh.slice();
   var kick = actIn(all, 'kick'), rev = actIn(all, 'rev');
-  if (leadEff >= 4) {
+  if (lc.eff >= 4) {
     if (rev && Math.random() < 0.7) return rev;
     if (kick && Math.random() < 0.6) return kick;
   }
   var bonus = M.mom.o || 0;
-  var val = function (x) { return x.dmg + abBonus(x, 'ans'); };
-  var hand = nums(all).sort(function (a, b) { return val(a) - val(b); });
+  var net = function (x) { return Math.max(0, x.dmg + bonus - lc.def) - Math.max(0, lc.eff - x.def); };
+  var hand = nums(all);
   if (Math.random() < 0.15) return hand[rand(0, hand.length - 1)];
-  var win = hand.filter(function (x) { return val(x) + bonus > leadEff; });
-  return win.length ? win[0] : hand[0];
+  return hand.slice().sort(function (a, b) { return net(b) - net(a); })[0];
 }
 async function playerLead(c) {
   M.busy = true; M.sel = null; clearPile(); setStatus('');
   effOf('p', c, 'lead');
   await fly(c, 'p');
-  var oc = aiAnswer(c.eff); effOf('o', oc, 'ans');
+  var oc = aiAnswer(c); effOf('o', oc, 'ans');
   await fly(oc, 'o'); await flip(oc);
   await resolve(c, oc);
 }
@@ -518,11 +521,13 @@ async function resolve(pc, oc) {
     txt = 'REVERSAL! THEY TAKE −' + leader.eff;
     if (leadP) { ow = true; col = '#ff6b6b'; txt = 'REVERSED! YOU TAKE −' + leader.eff; }
     else { pw = true; col = '#2fb5a3'; txt = 'REVERSAL! THEY TAKE −' + leader.eff; }
-  } else if (pc.eff > oc.eff) {
-    hurt('o', pc.eff); pw = true; col = '#2fb5a3'; txt = 'YOU HIT · −' + pc.eff;
-  } else if (oc.eff > pc.eff) {
-    hurt('p', oc.eff); ow = true; col = '#ff6b6b'; txt = 'THEY HIT · −' + oc.eff;
-  } else { txt = 'STALEMATE · NO DAMAGE'; }
+  } else {
+    var toO = Math.max(0, pc.eff - oc.def), toP = Math.max(0, oc.eff - pc.def);
+    if (toO) hurt('o', toO);
+    if (toP) hurt('p', toP);
+    if (toO > toP) { pw = true; col = '#2fb5a3'; } else if (toP > toO) { ow = true; col = '#ff6b6b'; }
+    txt = (!toO && !toP) ? 'BLOCKED · NO DAMAGE' : 'YOU −' + toP + ' · THEM −' + toO;
+  }
   [['p', pc], ['o', oc]].forEach(function (x) {
     var side = x[0], c = x[1];
     if (c.act === 'rec') { M[side === 'p' ? 'hp' : 'hp'][side] = Math.min(START_HP, M.hp[side] + 5); floatTxt('+5', side); txt += ' · HEAL +5'; }
