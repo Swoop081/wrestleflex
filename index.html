@@ -49,6 +49,22 @@ html,body{margin:0;width:100%;height:100%;position:fixed;overflow:hidden;overscr
 .card.boost{box-shadow:0 0 18px #ffd25a}
 .card.boost .dmg{color:#ffd25a}
 
+/* board battle */
+.card .stk{display:flex;flex-direction:column;line-height:1}
+.card .hpv{font-family:'Bebas Neue','Arial Narrow',Impact,sans-serif;font-size:30px;line-height:1;color:#6be3c9}
+.card .hpv small{font-size:9px;letter-spacing:.06em;margin-left:3px;font-family:Inter,system-ui,sans-serif;font-weight:700;opacity:.8}
+.card.ph .hpv{text-shadow:0 1px 4px rgba(0,0,0,.85)}
+.slot{position:absolute;width:52px;height:74px;box-sizing:border-box;border:1.5px dashed rgba(216,220,236,.16);border-radius:8px;pointer-events:auto}
+.slot.mine.hot{border-color:#2fb5a3;background:rgba(47,181,163,.14);box-shadow:0 0 12px rgba(47,181,163,.4)}
+.card.bc{padding:3px 4px;gap:0;border-width:1.5px;border-radius:7px;justify-content:space-between;transition:opacity .3s,transform .3s,box-shadow .2s}
+.bc .bi{font-family:'Bebas Neue','Arial Narrow',Impact,sans-serif;font-size:26px;line-height:1;text-align:center;opacity:.9}
+.bc.ph .bi{visibility:hidden}
+.bc .bn{font-size:7.5px;font-weight:700;letter-spacing:.03em;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bc .bs{display:flex;justify-content:space-between;font-family:'Bebas Neue','Arial Narrow',Impact,sans-serif;font-size:21px;line-height:1}
+.bc .ba{color:#ffb86b}.bc .bh{color:#6be3c9}
+.bc.ph .bn,.bc.ph .ba,.bc.ph .bh{text-shadow:0 1px 3px rgba(0,0,0,.95)}
+.bc.hit{box-shadow:0 0 16px #ff6b6b}
+#ring,#pileLbl{display:none}
 /* match */
 #ohand{position:absolute;left:-95px;top:-95px;width:0;height:0;transform-origin:0 0;transform:rotate(180deg);z-index:1}
 #hand{position:absolute;right:-110px;bottom:-110px;width:0;height:0;z-index:10}
@@ -131,7 +147,7 @@ html,body{margin:0;width:100%;height:100%;position:fixed;overflow:hidden;overscr
     <div class="sub">CARD BATTLES</div>
     <div id="homeCard"></div>
     <div id="homeInfo"></div>
-    <div id="homeHint">Tap a card to lift it, tap again to play it.<br>The higher card hits the other player's HP.</div>
+    <div id="homeHint">Tap a card to lift it, tap again to play it.<br>Then tap a lane to place it. Your cards fight the cards across from them, or hit the health bar.</div>
     <div id="homeBtns">
       <button class="btn" id="goPlay">PLAY</button>
       <button class="btn alt" id="goColl">COLLECTION</button>
@@ -190,7 +206,7 @@ var W = [
   {id:'punk',  name:'CM Punk',      short:'PUNK',   init:'CP', hue:285, img:null, mate:'Danhausen'},
   {id:'austin',name:'Stone Cold Steve Austin', short:'AUSTIN', init:'SA', hue:45, img:null, mate:'Dude Love'}
 ];
-var MATE_NUMS = [7,6,5,4,3,2,1];  /* the seven minions, one of each number; extra stars replace the lowest */
+var MATE_STATS = [[3,2],[2,3],[2,2],[3,1],[1,3],[2,1],[1,2]];  /* [attack, health], strongest first; extra stars replace the weakest */
 var ACTS_PER_HAND = 0;  /* action cards are off for the fast duel */
 var ACTS = [
   {act:'kick', name:'KICK OUT',  sym:'✖', txt:'CANCELS BOTH CARDS'},
@@ -205,7 +221,7 @@ var AB = {
   lead:   '+1 WHEN LEADING'
 };
 var METER_MAX = 3, METER_BONUS = 2;
-var STAR_DMG = 10, START_HP = 30, STEP = 4.85;
+var STAR_ATK = 5, STAR_HP = 8, START_HP = 20, STEP = 4.85;
 var wById = {}; W.forEach(function (w) { wById[w.id] = w; });
 
 /* ---------- helpers ---------- */
@@ -255,7 +271,7 @@ window.addEventListener('orientationchange', function () { setTimeout(fit, 150);
 /* ---------- cards ---------- */
 var uid = 0;
 function mk(base) { base.uid = ++uid; return base; }
-function starCard(w) { return mk({star:true, ab:w.sab, dmg:STAR_DMG, name:w.short, hue:w.hue, init:w.init, img:w.img}); }
+function starCard(w) { return mk({star:true, atk:STAR_ATK, hp:STAR_HP, name:w.short, hue:w.hue, init:w.init, img:w.img}); }
 function buildHand(w, copies) {
   var cards = [];
   for (var i = 0; i < copies; i++) cards.push(starCard(w));
@@ -264,7 +280,7 @@ function buildHand(w, copies) {
     var a = pool[k];
     cards.push(mk({star:false, act:a.act, dmg:0, def:0, sym:a.sym, abTxt:a.txt, name:a.name, hue:0, init:'!'}));
   }
-  for (var j = 0; j < 8 - copies - nAct; j++) cards.push(mk({star:false, ab:w.mab, dmg:MATE_NUMS[j], name:w.mate, hue:0, init:w.mate.charAt(0)}));
+  for (var j = 0; j < 8 - copies - nAct; j++) cards.push(mk({star:false, atk:MATE_STATS[j][0], hp:MATE_STATS[j][1], name:w.mate, hue:0, init:w.mate.charAt(0)}));
   return shuffle(cards);
 }
 function cardVars(c) {
@@ -274,8 +290,8 @@ function cardVars(c) {
     : '--bd:#4a5378;--bg2:#1e2336;--ink2:#e8ebf5';
 }
 function faceHTML(c) {
-  return '<div class="top"><span class="dmg">' + (c.act ? c.sym : c.dmg) + '</span><span class="tag">' + (c.star ? 'STAR' : (c.act ? 'ACTION' : 'MINION')) + '</span></div>' +
-         '<div class="art">' + (c.star ? c.init : '') + '</div><div class="ab">' + (c.abTxt || AB[c.ab] || '') + '</div><div class="nm">' + c.name.toUpperCase() + '</div>';
+  return '<div class="top"><div class="stk"><span class="dmg">' + c.atk + '<small>ATK</small></span><span class="hpv">' + c.hp + '<small>HP</small></span></div><span class="tag">' + (c.star ? 'STAR' : 'MINION') + '</span></div>' +
+         '<div class="art">' + (c.star ? c.init : '') + '</div><div class="nm">' + c.name.toUpperCase() + '</div>';
 }
 function mkEl(c, w, h, back) {
   var e = document.createElement('div');
@@ -327,18 +343,22 @@ $('tReset').onclick = function () { save = {copies:{roman:1}, active:'roman', wi
 
 /* ---------- match ---------- */
 var M = null;
+var LANES = 5, BW = 52, BH = 74, GAP = 6;
 function SG() { return save.lefty ? -1 : 1; }
 function theta(i, n) { return 45 + ((n - 1) / 2 - i) * STEP; }
 function setStatus(t, col) { var s = $('status'); s.textContent = t; s.style.color = col || '#aab1c8'; }
-function meterStr(side) {
-  var n = (side === 'p' ? M.ph : M.oh).length;
-  return n + ' cards' + (M.mom[side] ? ' · ▲+3' : '');
-}
+function slotX(l) { return -((LANES * BW + (LANES - 1) * GAP) / 2) + l * (BW + GAP); }
+function slotY(side) { return side === 'o' ? -98 : -16; }
 function updPanels() {
   $('oppBar').style.width = (M.hp.o / START_HP * 100) + '%';
   $('youBar').style.width = (M.hp.p / START_HP * 100) + '%';
-  $('oppLn').textContent = 'HP ' + M.hp.o + ' / ' + START_HP + ' · ' + meterStr('o');
-  $('youLn').textContent = 'HP ' + M.hp.p + ' / ' + START_HP + ' · ' + meterStr('p');
+  $('oppLn').textContent = 'HP ' + M.hp.o + ' / ' + START_HP + ' · ' + M.oh.length + ' cards';
+  $('youLn').textContent = 'HP ' + M.hp.p + ' / ' + START_HP + ' · ' + M.ph.length + ' cards';
+}
+function validLane(l) { var row = M.board.p; return row.some(function (x) { return !x; }) ? !row[l] : true; }
+function refreshSlots() {
+  if (!M.slots) return;
+  M.slots.p.forEach(function (s, l) { s.classList.toggle('hot', !!M.sel && !M.busy && !M.over && validLane(l)); });
 }
 function layout() {
   var n = M.ph.length;
@@ -355,51 +375,17 @@ function layout() {
     c.el._rot = 180 - t * SG();
     c.el.style.transform = 'rotate(' + (-t * SG()) + 'deg)';
   });
-  updPanels();
+  updPanels(); refreshSlots();
 }
-function newRound() {
-  $('roundT').textContent = 'ROUND ' + M.round + ' / 8';
-  $('pileLbl').textContent = M.pile ? 'PLAY PILE · ' + M.pile + ' CARDS' : 'PLAY PILE';
-  M.lead = (M.round % 2 === 1) ? 'p' : 'o';
-  if (M.lead === 'p') idleStatus(); else oppLeads();
+function mkBoard(c) {
+  var e = document.createElement('div');
+  e.className = 'card bc';
+  e.style.cssText = cardVars(c) + ';width:' + BW + 'px;height:' + BH + 'px';
+  e.innerHTML = '<div class="bi">' + (c.star ? c.init : c.name.charAt(0)) + '</div><div class="bn">' + c.name.toUpperCase() + '</div><div class="bs"><b class="ba">' + c.atk + '</b><b class="bh">' + c.hp + '</b></div>';
+  if (c.img) { e.classList.add('ph'); e.style.background = 'linear-gradient(transparent 55%,rgba(8,10,18,.92)),url(' + c.img + ') center top/cover no-repeat'; }
+  return e;
 }
-function idleStatus() {
-  if (M.lead === 'p') setStatus('YOUR LEAD · TAP A CARD');
-  else if (M.pending) setStatus('THEY PLAYED ' + (M.pending.act ? M.pending.name : M.pending.eff) + ' · TAP A CARD TO ANSWER');
-}
-function startMatch() {
-  fixActive();
-  var me = wById[save.active], copies = save.copies[me.id];
-  var others = W.filter(function (w) { return w.id !== me.id; });
-  var ow = others[rand(0, others.length - 1)];
-  var oc = clamp(copies + rand(-1, 1), 1, 8);
-  M = {me:me, ow:ow, ph:buildHand(me, copies), oh:buildHand(ow, oc), hp:{p:START_HP, o:START_HP}, round:1, sel:null, busy:false, over:false, pile:0, meter:{p:0,o:0}, mom:{p:0,o:0}, lead:'p', pending:null};
-  $('hand').innerHTML = ''; $('ohand').innerHTML = ''; $('pileCards').innerHTML = '';
-  $('oppName').textContent = ow.name.toUpperCase();
-  $('youName').textContent = me.name.toUpperCase();
-  M.ph.forEach(function (c) { c.el = mkEl(c, 100, 190, false); c.el.classList.add('h'); $('hand').appendChild(c.el); });
-  M.oh.forEach(function (c) { c.el = mkEl(c, 80, 120, true); c.el.classList.add('o'); $('ohand').appendChild(c.el); });
-  $('match').classList.toggle('lefty', !!save.lefty);
-  show('match');
-  layout();
-  newRound();
-}
-$('hand').addEventListener('click', function (e) {
-  if (!M || M.busy || M.over) return;
-  var el = e.target.closest ? e.target.closest('.card') : null;
-  if (!el) return;
-  var c = M.ph.filter(function (x) { return x.el === el; })[0];
-  if (!c) return;
-  if (M.sel === c) { if (M.lead === 'p') playerLead(c); else answer(c); }
-  else { M.sel = c; setStatus(M.lead === 'p' ? 'TAP AGAIN TO LEAD' : 'TAP AGAIN TO ANSWER'); layout(); }
-});
-$('match').addEventListener('click', function (e) {
-  if (M && !M.busy && !M.over && M.sel && !(e.target.closest && e.target.closest('.card'))) {
-    M.sel = null; idleStatus(); layout();
-  }
-});
-$('quit').onclick = function () { M = null; show('home'); };
-
+function refreshB(c) { c.bel.querySelector('.ba').textContent = c.atk; c.bel.querySelector('.bh').textContent = Math.max(0, c.hp); }
 function ctr(r) { return {x:(r.left + r.width / 2 - offX) / S, y:(r.top + r.height / 2) / S}; }
 function place(el, c, w, h, rot) {
   el.style.transition = 'none';
@@ -416,139 +402,172 @@ function floatTxt(txt, who) {
   $('match').appendChild(f);
   setTimeout(function () { if (f.parentNode) f.parentNode.removeChild(f); }, 1000);
 }
-
-function clearPile() {
-  Array.prototype.forEach.call($('pileCards').querySelectorAll('.card'), function (e) { e.classList.add('old'); e.classList.remove('win', 'lose'); });
-}
-/* a charged meter adds a bonus to the next card played, then empties */
-function abBonus(c, role) { return (c.ab === 'answer' && role === 'ans') || (c.ab === 'lead' && role === 'lead') ? 1 : 0; }
-function effOf(side, c, role) {
-  var b = M.meter[side] >= METER_MAX;
-  if (b) M.meter[side] = 0;
-  var ab = abBonus(c, role), mo = 0;
-  if (!c.act && M.mom[side]) { mo = M.mom[side]; M.mom[side] = 0; }
-  c.boosted = b || ab > 0 || mo > 0; c.eff = c.dmg + (b ? METER_BONUS : 0) + ab + mo;
-}
-function showEff(el, c) {
-  if (c.act) return;
-  var d = el.querySelector('.dmg'); if (d) d.textContent = c.eff;
-  if (c.boosted) el.classList.add('boost');
-}
-async function fly(c, side) {
-  var mine = side === 'p', e = c.el;
-  var cn = ctr(e.getBoundingClientRect()), rot = e._rot;
-  if (mine) M.ph = M.ph.filter(function (x) { return x !== c; });
-  else M.oh = M.oh.filter(function (x) { return x !== c; });
-  e.parentNode.removeChild(e);
-  var w = mine ? 100 : 80, h = mine ? 190 : 120;
-  var f = mkEl(c, w, h, !mine);
-  if (mine) showEff(f, c);
-  place(f, cn, w, h, rot);
+function floatAt(txt, side, lane) {
+  var f = document.createElement('div');
+  f.className = 'float'; f.textContent = txt; f.style.fontSize = '26px';
+  f.style.left = (slotX(lane) + BW / 2) + 'px'; f.style.top = (slotY(side) + 14) + 'px';
   $('pileCards').appendChild(f);
-  layout();
-  void f.offsetWidth;
-  var j = function () { return rand(-5, 5); };
-  var t = mine ? {x:24 + j(), y:30 + j(), r:rand(2, 10)} : {x:-24 + j(), y:-30 + j(), r:rand(-10, -2)};
-  var ease = 'cubic-bezier(.2,.8,.2,1)';
-  f.style.transition = 'left .5s ' + ease + ',top .5s ' + ease + ',width .5s,height .5s,transform .5s ' + ease;
-  f.style.left = (t.x - 42) + 'px'; f.style.top = (t.y - 59) + 'px';
-  f.style.width = '84px'; f.style.height = '118px';
-  f.style.transform = 'rotate(' + t.r + 'deg)';
-  c.fly = f; c.tr = t.r;
-  await sleep(620);
-}
-async function flip(c) {
-  var f = c.fly;
-  f.style.transition = 'transform .15s'; f.style.transform = 'rotate(' + c.tr + 'deg) scaleX(0)';
-  await sleep(160);
-  f.classList.remove('back'); showEff(f, c);
-  f.style.transform = 'rotate(' + c.tr + 'deg) scaleX(1)';
-  await sleep(260);
-}
-/* opponent brain: leads low most of the time, answers with the cheapest card that wins */
-function nums(hand) { var n = hand.filter(function (x) { return !x.act; }); return n.length ? n : hand; }
-function actIn(hand, act) { return hand.filter(function (x) { return x.act === act; })[0]; }
-function aiLead() {
-  var all = M.oh.slice(), r = Math.random();
-  var rec = actIn(all, 'rec'), mom = actIn(all, 'mom');
-  if (rec && M.hp.o <= START_HP - 8 && r < 0.6) return rec;
-  if (mom && M.round <= 5 && r < 0.3) return mom;
-  var hand = nums(all).sort(function (a, b) { return a.dmg - b.dmg; });
-  r = Math.random();
-  if (r < 0.5 || hand.length === 1) return hand[0];
-  if (r < 0.8) return hand[rand(0, hand.length - 1)];
-  return hand[hand.length - 1];
-}
-function aiAnswer(lc) {
-  var all = M.oh.slice();
-  var kick = actIn(all, 'kick'), rev = actIn(all, 'rev');
-  if (lc.eff >= 4) {
-    if (rev && Math.random() < 0.7) return rev;
-    if (kick && Math.random() < 0.6) return kick;
-  }
-  var hand = nums(all).sort(function (x, y) { return x.dmg - y.dmg; });
-  if (Math.random() < 0.15) return hand[rand(0, hand.length - 1)];
-  var win = hand.filter(function (x) { return x.dmg > lc.eff; });
-  return win.length ? win[0] : hand[0];
-}
-async function playerLead(c) {
-  M.busy = true; M.sel = null; clearPile(); setStatus('');
-  effOf('p', c, 'lead');
-  await fly(c, 'p');
-  var oc = aiAnswer(c); effOf('o', oc, 'ans');
-  await fly(oc, 'o'); await flip(oc);
-  await resolve(c, oc);
-}
-async function oppLeads() {
-  M.busy = true; clearPile(); setStatus('THEY LEAD…');
-  await sleep(450);
-  if (!M) return;
-  var oc = aiLead(); effOf('o', oc, 'lead');
-  await fly(oc, 'o'); await flip(oc);
-  if (!M) return;
-  M.pending = oc; M.busy = false; idleStatus(); updPanels();
-}
-async function answer(c) {
-  M.busy = true; M.sel = null; setStatus('');
-  effOf('p', c, 'ans');
-  await fly(c, 'p');
-  var oc = M.pending; M.pending = null;
-  await resolve(c, oc);
+  setTimeout(function () { if (f.parentNode) f.parentNode.removeChild(f); }, 1000);
 }
 function hurt(side, n) {
   if (side === 'p') { M.hp.p = Math.max(0, M.hp.p - n); floatTxt('−' + n, 'p'); }
   else { M.hp.o = Math.max(0, M.hp.o - n); floatTxt('−' + n, 'o'); }
 }
-async function resolve(pc, oc) {
-  var fp = pc.fly, fo = oc.fly, txt = '', col = '#aab1c8', pw = false, ow = false;
-  var leadP = M.lead === 'p', leader = leadP ? pc : oc, ans = leadP ? oc : pc;
-  var kick = pc.act === 'kick' || oc.act === 'kick';
-  if (kick) {
-    txt = 'KICK OUT · NO DAMAGE';
-  } else if (ans.act === 'rev' && !leader.act && leader.eff > 0) {
-    hurt(leadP ? 'p' : 'o', leader.eff);
-    txt = 'REVERSAL! THEY TAKE −' + leader.eff;
-    if (leadP) { ow = true; col = '#ff6b6b'; txt = 'REVERSED! YOU TAKE −' + leader.eff; }
-    else { pw = true; col = '#2fb5a3'; txt = 'REVERSAL! THEY TAKE −' + leader.eff; }
-  } else {
-    if (pc.eff > oc.eff) { hurt('o', pc.eff); pw = true; col = '#2fb5a3'; txt = 'YOU HIT · −' + pc.eff; }
-    else if (oc.eff > pc.eff) { hurt('p', oc.eff); ow = true; col = '#ff6b6b'; txt = 'THEY HIT · −' + oc.eff; }
-    else { txt = 'STALEMATE · NO DAMAGE'; }
-  }
-  [['p', pc], ['o', oc]].forEach(function (x) {
-    var side = x[0], c = x[1];
-    if (c.act === 'rec') { M[side === 'p' ? 'hp' : 'hp'][side] = Math.min(START_HP, M.hp[side] + 5); floatTxt('+5', side); txt += ' · HEAL +5'; }
-    if (c.act === 'mom') { M.mom[side] = 3; }
+
+function startMatch() {
+  fixActive();
+  var me = wById[save.active], copies = save.copies[me.id];
+  var others = W.filter(function (w) { return w.id !== me.id; });
+  var ow = others[rand(0, others.length - 1)];
+  var oc = clamp(copies + rand(-1, 1), 1, 8);
+  var empty = function () { var r = []; for (var i = 0; i < LANES; i++) r.push(null); return r; };
+  M = {me:me, ow:ow, ph:buildHand(me, copies), oh:buildHand(ow, oc), hp:{p:START_HP, o:START_HP}, round:1, sel:null, busy:true, over:false, lead:'p', idle:'', board:{p:empty(), o:empty()}, slots:{p:[], o:[]}};
+  $('hand').innerHTML = ''; $('ohand').innerHTML = ''; $('pileCards').innerHTML = '';
+  $('oppName').textContent = ow.name.toUpperCase();
+  $('youName').textContent = me.name.toUpperCase();
+  M.ph.forEach(function (c) { c.el = mkEl(c, 100, 190, false); c.el.classList.add('h'); $('hand').appendChild(c.el); });
+  M.oh.forEach(function (c) { c.el = mkEl(c, 80, 120, true); c.el.classList.add('o'); $('ohand').appendChild(c.el); });
+  ['o', 'p'].forEach(function (side) {
+    for (var l = 0; l < LANES; l++) {
+      var sl = document.createElement('div');
+      sl.className = 'slot' + (side === 'p' ? ' mine' : '');
+      sl.style.left = slotX(l) + 'px'; sl.style.top = slotY(side) + 'px';
+      if (side === 'p') (function (lane) { sl.addEventListener('click', function (ev) { ev.stopPropagation(); onSlot(lane); }); })(l);
+      $('pileCards').appendChild(sl); M.slots[side].push(sl);
+    }
   });
-  if (pw) { fp.classList.add('win'); fo.classList.add('lose'); }
-  if (ow) { fo.classList.add('win'); fp.classList.add('lose'); }
-  M.pile += 2;
-  $('pileLbl').textContent = 'PLAY PILE · ' + M.pile + ' CARDS';
-  setStatus(txt, col); updPanels();
-  await sleep(1300);
-  if (!M) return;
-  if (M.hp.p <= 0 || M.hp.o <= 0 || M.ph.length === 0) { finish(); }
-  else { M.round++; M.busy = false; newRound(); }
+  $('match').classList.toggle('lefty', !!save.lefty);
+  show('match');
+  layout();
+  startTurn();
+}
+function autoLane() {
+  var row = M.board.p, foe = M.board.o, empties = [], l;
+  for (l = 0; l < LANES; l++) if (!row[l]) empties.push(l);
+  if (empties.length) {
+    var facing = empties.filter(function (x) { return foe[x]; });
+    return facing.length ? facing[0] : empties[0];
+  }
+  var w = 0;
+  for (l = 1; l < LANES; l++) if (row[l].atk + row[l].hp < row[w].atk + row[w].hp) w = l;
+  return w;
+}
+function onSlot(l) { if (!M || M.busy || M.over || !M.sel || !validLane(l)) return; playerPlace(M.sel, l); }
+$('hand').addEventListener('click', function (e) {
+  if (!M || M.busy || M.over) return;
+  var el = e.target.closest ? e.target.closest('.card') : null;
+  if (!el) return;
+  var c = M.ph.filter(function (x) { return x.el === el; })[0];
+  if (!c) return;
+  if (M.sel === c) { playerPlace(c, autoLane()); }
+  else { M.sel = c; setStatus('TAP A LANE · OR TAP THE CARD AGAIN'); layout(); }
+});
+$('match').addEventListener('click', function (e) {
+  if (M && !M.busy && !M.over && M.sel && !(e.target.closest && e.target.closest('.card'))) {
+    M.sel = null; setStatus(M.idle); layout();
+  }
+});
+$('quit').onclick = function () { M = null; show('home'); };
+
+function removeBoard(side, lane) {
+  var row = M.board[side], c = row[lane]; if (!c) return;
+  row[lane] = null;
+  c.bel.style.opacity = '0'; c.bel.style.transform = 'scale(.5)';
+  setTimeout(function () { if (c.bel.parentNode) c.bel.parentNode.removeChild(c.bel); }, 350);
+}
+async function placeCard(side, c, lane) {
+  var m = M, mine = side === 'p', row = M.board[side];
+  if (mine) M.ph = M.ph.filter(function (x) { return x !== c; });
+  else M.oh = M.oh.filter(function (x) { return x !== c; });
+  if (row[lane]) removeBoard(side, lane);
+  var he = c.el, cn = ctr(he.getBoundingClientRect()), rot = he._rot;
+  he.parentNode.removeChild(he);
+  var b = mkBoard(c); c.bel = b;
+  place(b, cn, BW, BH, rot);
+  $('pileCards').appendChild(b);
+  row[lane] = c; c.lane = lane;
+  layout();
+  void b.offsetWidth;
+  var ease = 'cubic-bezier(.2,.8,.2,1)';
+  b.style.transition = 'left .45s ' + ease + ',top .45s ' + ease + ',transform .45s ' + ease;
+  b.style.left = slotX(lane) + 'px'; b.style.top = slotY(side) + 'px'; b.style.transform = 'rotate(0deg)';
+  await sleep(520);
+}
+async function aiPlace() {
+  var row = M.board.o, foeRow = M.board.p, best = null, bs = -1e9, full = row.every(Boolean);
+  M.oh.forEach(function (c) {
+    for (var l = 0; l < LANES; l++) {
+      if (row[l] && !full) continue;
+      var foe = foeRow[l], sc = 0;
+      if (foe) {
+        if (c.atk >= foe.hp) sc += 3 + foe.atk * 0.3;
+        if (foe.atk >= c.hp) sc -= 2.5; else sc += 1;
+        sc += Math.min(c.atk, foe.hp) * 0.2;
+      } else { sc += c.atk * 0.9; }
+      sc -= (c.atk + c.hp) * 0.25;
+      if (row[l]) sc -= 3 + (row[l].atk + row[l].hp) * 0.3;
+      sc += Math.random() * 1.2;
+      if (sc > bs) { bs = sc; best = {c:c, l:l}; }
+    }
+  });
+  await placeCard('o', best.c, best.l);
+}
+function hasCards() { return M.board.p.some(Boolean) || M.board.o.some(Boolean); }
+function flash(c) { c.bel.classList.add('hit'); setTimeout(function () { c.bel.classList.remove('hit'); }, 520); }
+async function combat() {
+  var m = M, P = M.board.p, O = M.board.o, l;
+  var dP = [], dO = [], heroP = 0, heroO = 0;
+  for (l = 0; l < LANES; l++) {
+    var a = P[l], b = O[l]; dP[l] = 0; dO[l] = 0;
+    if (a && b) { dO[l] = a.atk; dP[l] = b.atk; }
+    else if (a) heroO += a.atk;
+    else if (b) heroP += b.atk;
+  }
+  setStatus('FIGHT!', '#ffd25a');
+  for (l = 0; l < LANES; l++) {
+    if (P[l] && dP[l]) { P[l].hp -= dP[l]; refreshB(P[l]); flash(P[l]); floatAt('−' + dP[l], 'p', l); }
+    if (O[l] && dO[l]) { O[l].hp -= dO[l]; refreshB(O[l]); flash(O[l]); floatAt('−' + dO[l], 'o', l); }
+  }
+  if (heroO) hurt('o', heroO);
+  if (heroP) hurt('p', heroP);
+  updPanels();
+  setStatus(heroP || heroO ? 'YOU −' + heroP + ' · THEM −' + heroO : 'CARDS CLASH', heroO > heroP ? '#2fb5a3' : (heroP > heroO ? '#ff6b6b' : '#aab1c8'));
+  await sleep(850);
+  if (M !== m) return;
+  for (l = 0; l < LANES; l++) {
+    if (P[l] && P[l].hp <= 0) removeBoard('p', l);
+    if (O[l] && O[l].hp <= 0) removeBoard('o', l);
+  }
+  await sleep(380);
+}
+async function startTurn() {
+  var m = M;
+  M.lead = (M.round % 2 === 1) ? 'p' : 'o';
+  $('roundT').textContent = 'TURN ' + M.round + ' / 8';
+  if (M.lead === 'o') {
+    M.busy = true; M.idle = ''; setStatus('THEY PLACE A CARD…'); layout();
+    await sleep(450); if (M !== m) return;
+    await aiPlace(); if (M !== m) return;
+    M.idle = 'THEY PLACED · YOUR TURN';
+  } else { M.idle = 'YOUR LEAD · TAP A CARD'; }
+  M.busy = false; setStatus(M.idle); layout();
+}
+async function playerPlace(c, lane) {
+  var m = M;
+  M.busy = true; M.sel = null; layout(); setStatus('');
+  await placeCard('p', c, lane); if (M !== m) return;
+  if (M.lead === 'p') { setStatus('THEY ANSWER…'); await sleep(300); if (M !== m) return; await aiPlace(); if (M !== m) return; }
+  await combat(); if (M !== m) return;
+  if (M.hp.p <= 0 || M.hp.o <= 0) { finish(); return; }
+  if (M.ph.length === 0) {
+    for (var i = 0; i < 5 && hasCards(); i++) {
+      setStatus('OVERTIME', '#ffd25a'); await sleep(500); if (M !== m) return;
+      await combat(); if (M !== m) return;
+      if (M.hp.p <= 0 || M.hp.o <= 0) break;
+    }
+    finish(); return;
+  }
+  M.round++; startTurn();
 }
 
 function finish() {
