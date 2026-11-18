@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WrestleFlex</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="WrestleFlex">
+<meta name="theme-color" content="#0f111a">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;position:fixed;overflow:hidden;overscroll-behavior:none;background:#0f111a;color:#e8ebf5;
+  font-family:'Inter',-apple-system,'Helvetica Neue',Arial,sans-serif;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
+.disp{font-family:'Bebas Neue','Arial Narrow',Impact,sans-serif;font-weight:400;letter-spacing:.06em}
+#probe{position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+#stage{position:absolute;top:0;width:390px;transform-origin:0 0;overflow:hidden;--sat:0px;--sab:0px;
+  background:radial-gradient(circle at 0% 0%,rgba(217,58,58,.30),transparent 45%),radial-gradient(circle at 100% 100%,rgba(47,181,163,.30),transparent 45%),#0f111a}
+.view{position:absolute;left:0;top:0;right:0;bottom:0;display:none}
+.view.on{display:block}
+
+/* cards */
+.card{position:absolute;border-radius:9px;padding:8px 9px;display:flex;flex-direction:column;gap:5px;
+  border:2px solid var(--bd);background:var(--bg2);color:var(--ink2);box-shadow:0 2px 8px rgba(0,0,0,.5);
+  transition:transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .2s,filter .3s,opacity .3s}
+.card .top{display:flex;justify-content:space-between;align-items:flex-start}
+.card .dmg{font-family:'Bebas Neue','Arial Narrow',Impact,sans-serif;font-size:40px;line-height:1}
+.card .tag{font-size:11px;font-weight:600;letter-spacing:.06em}
+.card .art{flex:1;min-height:0;border-radius:6px;display:flex;align-items:center;justify-content:center;opacity:.85;
+  background:repeating-linear-gradient(135deg,rgba(255,255,255,.07) 0,rgba(255,255,255,.07) 6px,rgba(255,255,255,.02) 6px,rgba(255,255,255,.02) 12px);
+  font-family:'Bebas Neue','Arial Narrow',Impact,sans-serif;font-size:34px;letter-spacing:.06em}
+.card .nm{font-size:11px;font-weight:600;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card.back{background:repeating-linear-gradient(45deg,#3b1219 0,#3b1219 8px,#2a0c12 8px,#2a0c12 16px);border-color:#7a2630;box-shadow:inset 0 0 0 4px #1a0a0e,0 2px 8px rgba(0,0,0,.5)}
+.card.back>*{display:none}
+.card.h{left:-50px;top:-360px;transform-origin:50px 360px;cursor:pointer}
+.card.o{left:-40px;top:-235px;transform-origin:40px 235px}
+.card.sel{box-shadow:0 0 22px var(--bd)}
+.card.old{filter:brightness(.62)}
+.card.win{box-shadow:0 0 20px #2fb5a3}
+.card.lose{opacity:.6}
+
+/* match */
+#ohand{position:absolute;left:-95px;top:-95px;width:0;height:0;transform-origin:0 0;transform:rotate(180deg);z-index:1}
+#hand{position:absolute;right:-110px;bottom:-110px;width:0;height:0;z-index:10}
+#pileWrap{position:absolute;left:195px;top:415px;width:0;height:0;z-index:20;pointer-events:none}
+#ring{position:absolute;left:-105px;top:-105px;width:210px;height:210px;border-radius:50%;border:2px dashed rgba(216,220,236,.22)}
+#roundT{position:absolute;left:-195px;top:-147px;width:390px;text-align:center;font-size:22px;color:#aab1c8}
+#status{position:absolute;left:-195px;top:-122px;width:390px;text-align:center;font-size:12px;font-weight:600;letter-spacing:.08em;color:#aab1c8;min-height:16px}
+#pileLbl{position:absolute;left:-195px;top:84px;width:390px;text-align:center;font-size:11px;font-weight:600;letter-spacing:.08em;color:#aab1c8}
+#pileCards{position:absolute;left:0;top:0;width:0;height:0}
+.panel{position:absolute;width:150px;z-index:30}
+.panel .nmp{font-size:19px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{margin-top:8px;height:10px;border-radius:5px;background:#2a3048;overflow:hidden}
+.bar>div{height:10px;border-radius:5px;transition:width .5s}
+.panel .ln{margin-top:6px;font-size:11px;font-weight:600;color:#aab1c8}
+#oppPanel{right:14px;top:calc(var(--sat) + 12px);text-align:right}
+#youPanel{left:16px;bottom:calc(var(--sab) + 22px)}
+#quit{position:absolute;left:164px;top:calc(var(--sat) + 12px);z-index:30;height:34px;padding:0 14px;border-radius:17px;border:1px solid #4a5378;background:rgba(20,24,39,.8);color:#aab1c8;font:600 11px 'Inter',sans-serif;letter-spacing:.08em}
+.float{position:absolute;z-index:40;font-family:'Bebas Neue','Arial Narrow',Impact,sans-serif;font-size:40px;color:#ff6b6b;pointer-events:none;transform:translateX(-50%);animation:rise .95s ease-out forwards}
+@keyframes rise{0%{opacity:0;margin-top:0}15%{opacity:1}100%{opacity:0;margin-top:-40px}}
+
+/* buttons */
+.btn{display:block;width:100%;height:54px;border-radius:14px;border:0;font:400 26px 'Bebas Neue','Arial Narrow',Impact,sans-serif;letter-spacing:.1em;color:#fff;background:#d93a3a}
+.btn.alt{background:#1e2336;border:1px solid #4a5378;color:#e8ebf5}
+.btn.small{height:42px;font-size:20px}
+.btn:active{filter:brightness(.85)}
+
+/* home */
+#home .ttl{position:absolute;left:0;right:0;top:calc(var(--sat) + 28px);text-align:center;font-size:50px;line-height:.95}
+#home .sub{position:absolute;left:0;right:0;top:calc(var(--sat) + 134px);text-align:center;font-size:11px;font-weight:600;letter-spacing:.08em;color:#aab1c8}
+#homeCard{position:absolute;left:120px;top:calc(var(--sat) + 175px);width:150px;height:225px}
+#homeInfo{position:absolute;left:0;right:0;top:calc(var(--sat) + 415px);text-align:center;font-size:13px;font-weight:600;line-height:1.5}
+#homeInfo small{display:block;font-size:11px;color:#aab1c8;font-weight:500}
+#homeBtns{position:absolute;left:24px;right:24px;bottom:calc(var(--sab) + 26px);display:flex;flex-direction:column;gap:10px}
+#homeHint{position:absolute;left:24px;right:24px;bottom:calc(var(--sab) + 160px);text-align:center;font-size:11px;color:#aab1c8;line-height:1.5}
+
+/* collection */
+#collHead{position:absolute;left:16px;right:16px;top:calc(var(--sat) + 12px);display:flex;align-items:center;justify-content:space-between}
+#collHead .t{font-size:34px}
+#collHead button{width:92px}
+#collScroll{position:absolute;left:0;right:0;top:calc(var(--sat) + 66px);bottom:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:6px 16px calc(var(--sab) + 30px)}
+#collGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.tile{border-radius:12px;padding:12px;border:2px solid hsl(var(--h) 55% 38%);background:linear-gradient(160deg,hsl(var(--h) 50% 20%),hsl(var(--h) 55% 9%));min-height:132px}
+.tile.active{border-color:#fff;box-shadow:0 0 14px hsl(var(--h) 85% 58% / .6)}
+.tile.locked{filter:grayscale(1);opacity:.5}
+.tile .ti{font-family:'Bebas Neue','Arial Narrow',Impact,sans-serif;font-size:40px;line-height:1;color:hsl(var(--h) 90% 82%)}
+.tile .tn{margin-top:2px;font-size:12px;font-weight:600;letter-spacing:.04em}
+.tile .pips{display:flex;gap:3px;margin-top:9px}
+.tile .pips i{display:block;width:12px;height:6px;border-radius:2px;background:#2a3048}
+.tile .pips i.on{background:hsl(var(--h) 85% 58%)}
+.tile .tc{margin-top:7px;font-size:11px;color:#c5cadb;line-height:1.35}
+#testBox{margin-top:18px;border:1px dashed #4a5378;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+#testBox .lb{font-size:11px;font-weight:600;letter-spacing:.08em;color:#aab1c8}
+
+/* result */
+#result{position:absolute;left:0;top:0;right:0;bottom:0;z-index:100;background:rgba(10,12,20,.94);display:none;flex-direction:column;align-items:center;justify-content:center;padding:calc(var(--sat) + 20px) 24px calc(var(--sab) + 20px);text-align:center}
+#result.on{display:flex}
+#result .big{font-size:60px;line-height:1}
+#result .sm{font-size:13px;color:#c5cadb;margin-top:4px;font-weight:600}
+#result .rw{margin-top:18px;font-size:12px;font-weight:600;letter-spacing:.08em;color:#f2b134}
+#result .rc{position:relative;width:170px;height:255px;margin:12px 0 4px}
+#result .rc .card{left:0;top:0;animation:pop .8s cubic-bezier(.2,.9,.3,1.2) both}
+#result .tip{margin-top:18px;font-size:12px;color:#aab1c8;line-height:1.5;max-width:300px}
+#result .btns{width:100%;margin-top:22px;display:flex;flex-direction:column;gap:10px}
+@keyframes pop{0%{transform:scale(0) rotate(-12deg);opacity:0}60%{transform:scale(1.12) rotate(3deg);opacity:1}100%{transform:scale(1) rotate(0)}}
+
+#rotate{position:fixed;left:0;top:0;right:0;bottom:0;z-index:999;background:#0f111a;display:none;align-items:center;justify-content:center;text-align:center;font-size:18px;font-weight:600;padding:30px}
+</style>
+</head>
+<body>
+<div id="probe"></div>
+<div id="stage">
+
+  <div id="home" class="view on">
+    <div class="ttl disp">WRESTLE<br>FLEX</div>
+    <div class="sub">CARD BATTLES</div>
+    <div id="homeCard"></div>
+    <div id="homeInfo"></div>
+    <div id="homeHint">Tap a card to lift it, tap again to play it.<br>The higher card hits the other player's HP.</div>
+    <div id="homeBtns">
+      <button class="btn" id="goPlay">PLAY</button>
+      <button class="btn alt" id="goColl">COLLECTION</button>
+    </div>
+  </div>
+
+  <div id="coll" class="view">
+    <div id="collHead"><div class="t disp">COLLECTION</div><button class="btn alt small" id="collBack">BACK</button></div>
+    <div id="collScroll">
+      <div id="collGrid"></div>
+      <div id="testBox">
+        <div class="lb">TEST TOOLS (REMOVE LATER)</div>
+        <button class="btn alt small" id="tAdd">+1 COPY OF SELECTED</button>
+        <button class="btn alt small" id="tAll">UNLOCK ALL WRESTLERS</button>
+        <button class="btn alt small" id="tReset">RESET SAVE</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="match" class="view">
+    <div id="ohand"></div>
+    <div id="pileWrap">
+      <div id="ring"></div>
+      <div id="roundT" class="disp"></div>
+      <div id="status"></div>
+      <div id="pileCards"></div>
+      <div id="pileLbl"></div>
+    </div>
+    <button id="quit">QUIT</button>
+    <div class="panel" id="oppPanel">
+      <div class="nmp disp" id="oppName">[OPPONENT]</div>
+      <div class="bar"><div id="oppBar" style="width:100%;background:#d93a3a"></div></div>
+      <div class="ln" id="oppLn"></div>
+    </div>
+    <div class="panel" id="youPanel">
+      <div class="nmp disp" id="youName">[YOU]</div>
+      <div class="bar"><div id="youBar" style="width:100%;background:#2fb5a3"></div></div>
+      <div class="ln" id="youLn"></div>
+    </div>
+    <div id="hand"></div>
+  </div>
+
+  <div id="result"></div>
+</div>
+<div id="rotate">Turn your phone upright to play.</div>
+
+<script>
+(function () {
+'use strict';
+
+/* ---------- data (all names are invented placeholders) ---------- */
+var W = [
+  {id:'mako',  name:'Iron Mako',     init:'IM', hue:210},
+  {id:'vex',   name:'Crimson Vex',   init:'CV', hue:355},
+  {id:'hollow',name:'Dusty Hollow',  init:'DH', hue:35},
+  {id:'tau',   name:'Tidal Tau',     init:'TT', hue:175},
+  {id:'nova',  name:'Nova Reyes',    init:'NR', hue:285},
+  {id:'under', name:'The Undertow',  init:'TU', hue:235},
+  {id:'rex',   name:'Rex Calloway',  init:'RC', hue:52},
+  {id:'volt',  name:'Saint Voltage', init:'SV', hue:140}
+];
+var MATES = [
+  {d:1,n:'Rookie'},{d:1,n:'Pal'},{d:2,n:'Enforcer'},{d:2,n:'Partner'},
+  {d:2,n:'Manager'},{d:3,n:'Veteran'},{d:3,n:'Masked Ace'}
+];
+var STAR_DMG = 5, START_HP = 20, STEP = 4.85;
+var wById = {}; W.forEach(function (w) { wById[w.id] = w; });
+
+/* ---------- helpers ---------- */
+function $(id) { return document.getElementById(id); }
+function rand(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = rand(0, i); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+
+/* ---------- save ---------- */
+var KEY = 'wcg_save_v1';
+var save = {copies:{mako:1}, active:'mako', wins:0, losses:0, draws:0};
+try {
+  var raw = localStorage.getItem(KEY);
+  if (raw) { var o = JSON.parse(raw); if (o && o.copies) { for (var k in o) save[k] = o[k]; } }
+} catch (e) {}
+function persist() { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch (e) {} }
+function fixActive() {
+  if (!save.copies[save.active]) {
+    var first = W.filter(function (w) { return save.copies[w.id]; })[0];
+    if (!first) { save.copies.mako = 1; first = W[0]; }
+    save.active = first.id;
+  }
+}
+fixActive();
+
+/* ---------- scaling to the phone ---------- */
+var stage = $('stage'), S = 1, H = 844, offX = 0, PY = 415;
+function fit() {
+  var iw = window.innerWidth, ih = window.innerHeight;
+  S = Math.min(iw / 390, ih / 640);
+  H = ih / S;
+  offX = (iw - 390 * S) / 2;
+  stage.style.height = H + 'px';
+  stage.style.left = offX + 'px';
+  stage.style.transform = 'scale(' + S + ')';
+  PY = Math.round(H * 0.49);
+  $('pileWrap').style.top = PY + 'px';
+  var cs = getComputedStyle($('probe'));
+  stage.style.setProperty('--sat', ((parseFloat(cs.paddingTop) || 0) / S) + 'px');
+  stage.style.setProperty('--sab', ((parseFloat(cs.paddingBottom) || 0) / S) + 'px');
+  $('rotate').style.display = (iw > ih && ih < 520) ? 'flex' : 'none';
+}
+window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', function () { setTimeout(fit, 150); });
+
+/* ---------- cards ---------- */
+var uid = 0;
+function mk(base) { base.uid = ++uid; return base; }
+function starCard(w) { return mk({star:true, dmg:STAR_DMG, name:w.name, hue:w.hue, init:w.init}); }
+function buildHand(w, copies) {
+  var cards = [];
+  for (var i = 0; i < copies; i++) cards.push(starCard(w));
+  MATES.slice(copies - 1).forEach(function (m) { cards.push(mk({star:false, dmg:m.d, name:m.n, hue:0, init:m.n.charAt(0)})); });
+  return shuffle(cards);
+}
+function cardVars(c) {
+  return c.star
+    ? '--bd:hsl(' + c.hue + ' 85% 58%);--bg2:linear-gradient(160deg,hsl(' + c.hue + ' 55% 26%),hsl(' + c.hue + ' 60% 10%));--ink2:hsl(' + c.hue + ' 90% 82%)'
+    : '--bd:#4a5378;--bg2:#1e2336;--ink2:#e8ebf5';
+}
+function faceHTML(c) {
+  return '<div class="top"><span class="dmg">' + c.dmg + '</span><span class="tag">' + (c.star ? 'STAR' : 'MATE') + '</span></div>' +
+         '<div class="art">' + (c.star ? c.init : '') + '</div><div class="nm">' + c.name.toUpperCase() + '</div>';
+}
+function mkEl(c, w, h, back) {
+  var e = document.createElement('div');
+  e.className = 'card' + (back ? ' back' : '');
+  e.style.cssText = cardVars(c) + ';width:' + w + 'px;height:' + h + 'px';
+  e.innerHTML = faceHTML(c);
+  return e;
+}
+
+/* ---------- screens ---------- */
+function show(id) {
+  ['home', 'coll', 'match'].forEach(function (v) { $(v).classList.toggle('on', v === id); });
+  $('result').classList.remove('on');
+  if (id === 'home') renderHome();
+  if (id === 'coll') renderColl();
+}
+function renderHome() {
+  var w = wById[save.active], n = save.copies[w.id];
+  var box = $('homeCard'); box.innerHTML = '';
+  var el = mkEl(starCard(w), 150, 225, false); el.style.left = '0'; el.style.top = '0';
+  box.appendChild(el);
+  $('homeInfo').innerHTML = w.name.toUpperCase() + ' · ' + n + (n === 1 ? ' STAR' : ' STARS') + ' IN HAND' +
+    '<small>Wins ' + save.wins + ' · Losses ' + save.losses + ' · Draws ' + save.draws + '</small>';
+}
+function renderColl() {
+  var g = $('collGrid'); g.innerHTML = '';
+  W.forEach(function (w) {
+    var n = save.copies[w.id] || 0;
+    var t = document.createElement('div');
+    t.className = 'tile' + (n ? '' : ' locked') + (save.active === w.id ? ' active' : '');
+    t.style.setProperty('--h', w.hue);
+    var pips = ''; for (var i = 1; i <= 8; i++) pips += '<i class="' + (i <= n ? 'on' : '') + '"></i>';
+    t.innerHTML = '<div class="ti">' + (n ? w.init : '?') + '</div><div class="tn">' + (n ? w.name.toUpperCase() : 'LOCKED') + '</div>' +
+      '<div class="pips">' + pips + '</div><div class="tc">' +
+      (n ? n + (n === 1 ? ' star' : ' stars') + ' + ' + (8 - n) + (8 - n === 1 ? ' teammate' : ' teammates') + (n === 8 ? ' · GOD HAND' : '') : 'Win matches to find') + '</div>';
+    if (n) t.onclick = function () { save.active = w.id; persist(); renderColl(); };
+    g.appendChild(t);
+  });
+}
+$('goPlay').onclick = function () { startMatch(); };
+$('goColl').onclick = function () { show('coll'); };
+$('collBack').onclick = function () { show('home'); };
+$('tAdd').onclick = function () { save.copies[save.active] = Math.min(8, (save.copies[save.active] || 0) + 1); persist(); renderColl(); };
+$('tAll').onclick = function () { W.forEach(function (w) { if (!save.copies[w.id]) save.copies[w.id] = 1; }); persist(); renderColl(); };
+$('tReset').onclick = function () { save = {copies:{mako:1}, active:'mako', wins:0, losses:0, draws:0}; persist(); renderColl(); };
+
+/* ---------- match ---------- */
+var M = null;
+function theta(i, n) { return 45 + ((n - 1) / 2 - i) * STEP; }
+function setStatus(t, col) { var s = $('status'); s.textContent = t; s.style.color = col || '#aab1c8'; }
+function updPanels() {
+  $('oppBar').style.width = (M.hp.o / START_HP * 100) + '%';
+  $('youBar').style.width = (M.hp.p / START_HP * 100) + '%';
+  $('oppLn').textContent = 'HP ' + M.hp.o + ' / ' + START_HP + ' · ' + M.oh.length + ' cards';
+  $('youLn').textContent = 'HP ' + M.hp.p + ' / ' + START_HP + ' · ' + M.ph.length + ' cards';
+}
+function layout() {
+  var n = M.ph.length;
+  M.ph.forEach(function (c, i) {
+    var t = theta(i, n), el = c.el, sel = (M.sel === c);
+    el._rot = -t;
+    el.style.transform = 'rotate(' + (-t) + 'deg)' + (sel ? ' translateY(-80px)' : '');
+    el.style.zIndex = sel ? 60 : i;
+    el.classList.toggle('sel', sel);
+  });
+  var m = M.oh.length;
+  M.oh.forEach(function (c, i) {
+    var t = theta(i, m);
+    c.el._rot = 180 - t;
+    c.el.style.transform = 'rotate(' + (-t) + 'deg)';
+  });
+  updPanels();
+}
+function newRound() {
+  $('roundT').textContent = 'ROUND ' + M.round + ' / 8';
+  $('pileLbl').textContent = M.pile ? 'PLAY PILE · ' + M.pile + ' CARDS' : 'PLAY PILE';
+  setStatus('YOUR MOVE · TAP A CARD');
+}
+function startMatch() {
+  fixActive();
+  var me = wById[save.active], copies = save.copies[me.id];
+  var others = W.filter(function (w) { return w.id !== me.id; });
+  var ow = others[rand(0, others.length - 1)];
+  var oc = clamp(copies + rand(-1, 1), 1, 8);
+  M = {me:me, ow:ow, ph:buildHand(me, copies), oh:buildHand(ow, oc), hp:{p:START_HP, o:START_HP}, round:1, sel:null, busy:false, over:false, pile:0};
+  $('hand').innerHTML = ''; $('ohand').innerHTML = ''; $('pileCards').innerHTML = '';
+  $('oppName').textContent = ow.name.toUpperCase();
+  $('youName').textContent = me.name.toUpperCase();
+  M.ph.forEach(function (c) { c.el = mkEl(c, 100, 190, false); c.el.classList.add('h'); $('hand').appendChild(c.el); });
+  M.oh.forEach(function (c) { c.el = mkEl(c, 80, 120, true); c.el.classList.add('o'); $('ohand').appendChild(c.el); });
+  show('match');
+  layout();
+  newRound();
+}
+$('hand').addEventListener('click', function (e) {
+  if (!M || M.busy || M.over) return;
+  var el = e.target.closest ? e.target.closest('.card') : null;
+  if (!el) return;
+  var c = M.ph.filter(function (x) { return x.el === el; })[0];
+  if (!c) return;
+  if (M.sel === c) { play(c); }
+  else { M.sel = c; setStatus('TAP AGAIN TO PLAY'); layout(); }
+});
+$('match').addEventListener('click', function (e) {
+  if (M && !M.busy && !M.over && M.sel && !(e.target.closest && e.target.closest('.card'))) {
+    M.sel = null; setStatus('YOUR MOVE · TAP A CARD'); layout();
+  }
+});
+$('quit').onclick = function () { M = null; show('home'); };
+
+function ctr(r) { return {x:(r.left + r.width / 2 - offX) / S, y:(r.top + r.height / 2) / S}; }
+function place(el, c, w, h, rot) {
+  el.style.transition = 'none';
+  el.style.left = (c.x - 195 - w / 2) + 'px';
+  el.style.top = (c.y - PY - h / 2) + 'px';
+  el.style.transform = 'rotate(' + rot + 'deg)';
+}
+function floatTxt(txt, who) {
+  var p = who === 'o' ? $('oppPanel') : $('youPanel');
+  var f = document.createElement('div');
+  f.className = 'float'; f.textContent = txt;
+  f.style.left = (p.offsetLeft + p.offsetWidth / 2) + 'px';
+  f.style.top = (p.offsetTop + (who === 'o' ? 40 : -44)) + 'px';
+  $('match').appendChild(f);
+  setTimeout(function () { if (f.parentNode) f.parentNode.removeChild(f); }, 1000);
+}
+
+async function play(c) {
+  M.busy = true; M.sel = null;
+  var oc = M.oh[rand(0, M.oh.length - 1)];
+  var pe = c.el, oe = oc.el;
+  var pc = ctr(pe.getBoundingClientRect()), ocn = ctr(oe.getBoundingClientRect());
+  var rp = pe._rot, ro = oe._rot;
+  M.ph = M.ph.filter(function (x) { return x !== c; });
+  M.oh = M.oh.filter(function (x) { return x !== oc; });
+  pe.parentNode.removeChild(pe); oe.parentNode.removeChild(oe);
+  var cards = $('pileCards');
+  Array.prototype.forEach.call(cards.querySelectorAll('.card'), function (e) { e.classList.add('old'); e.classList.remove('win', 'lose'); });
+  var fp = mkEl(c, 100, 190, false), fo = mkEl(oc, 80, 120, true);
+  place(fp, pc, 100, 190, rp); place(fo, ocn, 80, 120, ro);
+  cards.appendChild(fp); cards.appendChild(fo);
+  setStatus('');
+  layout();
+  void fp.offsetWidth;
+  var j = function () { return rand(-5, 5); };
+  var tp = {x:24 + j(), y:30 + j(), r:rand(2, 10)}, to = {x:-24 + j(), y:-30 + j(), r:rand(-10, -2)};
+  var ease = 'cubic-bezier(.2,.8,.2,1)';
+  var tr = 'left .5s ' + ease + ',top .5s ' + ease + ',width .5s,height .5s,transform .5s ' + ease;
+  fp.style.transition = tr; fo.style.transition = tr;
+  fp.style.left = (tp.x - 42) + 'px'; fp.style.top = (tp.y - 59) + 'px'; fp.style.width = '84px'; fp.style.height = '118px'; fp.style.transform = 'rotate(' + tp.r + 'deg)';
+  fo.style.left = (to.x - 42) + 'px'; fo.style.top = (to.y - 59) + 'px'; fo.style.width = '84px'; fo.style.height = '118px'; fo.style.transform = 'rotate(' + to.r + 'deg)';
+  await sleep(620);
+  fo.style.transition = 'transform .15s'; fo.style.transform = 'rotate(' + to.r + 'deg) scaleX(0)';
+  await sleep(160);
+  fo.classList.remove('back'); fo.style.transform = 'rotate(' + to.r + 'deg) scaleX(1)';
+  await sleep(260);
+  var dp = c.dmg, dO = oc.dmg, txt, col;
+  if (dp > dO) { M.hp.o = Math.max(0, M.hp.o - dp); txt = 'YOU HIT · −' + dp; col = '#2fb5a3'; fp.classList.add('win'); fo.classList.add('lose'); floatTxt('−' + dp, 'o'); }
+  else if (dO > dp) { M.hp.p = Math.max(0, M.hp.p - dO); txt = 'THEY HIT · −' + dO; col = '#ff6b6b'; fo.classList.add('win'); fp.classList.add('lose'); floatTxt('−' + dO, 'p'); }
+  else { txt = 'STALEMATE · NO DAMAGE'; col = '#aab1c8'; }
+  M.pile += 2;
+  $('pileLbl').textContent = 'PLAY PILE · ' + M.pile + ' CARDS';
+  setStatus(txt, col); updPanels();
+  await sleep(1100);
+  if (!M) return;
+  if (M.hp.p <= 0 || M.hp.o <= 0 || M.ph.length === 0) { finish(); }
+  else { M.round++; M.busy = false; newRound(); }
+}
+
+function finish() {
+  M.over = true;
+  var r = M.hp.p > M.hp.o ? 'win' : (M.hp.p < M.hp.o ? 'lose' : 'draw');
+  save[r === 'win' ? 'wins' : (r === 'lose' ? 'losses' : 'draws')]++;
+  var reward = null;
+  if (r === 'win') {
+    var w = W[rand(0, W.length - 1)];
+    var before = save.copies[w.id] || 0, after = Math.min(8, before + 1);
+    save.copies[w.id] = after;
+    reward = {w:w, before:before, after:after};
+  }
+  persist();
+  var title = r === 'win' ? 'VICTORY' : (r === 'lose' ? 'DEFEAT' : 'DRAW');
+  var col = r === 'win' ? '#2fb5a3' : (r === 'lose' ? '#ff6b6b' : '#aab1c8');
+  var html = '<div class="big disp" style="color:' + col + '">' + title + '</div>' +
+    '<div class="sm">YOU ' + M.hp.p + ' HP · ' + M.ow.name.toUpperCase() + ' ' + M.hp.o + ' HP</div>';
+  if (reward) {
+    var label = reward.before === 0 ? 'NEW WRESTLER UNLOCKED'
+      : (reward.after === reward.before ? 'ALREADY AT 8 COPIES' : 'COPY ' + reward.after + ' OF 8 · ' + reward.after + ' STARS IN HAND');
+    html += '<div class="rw">' + label + '</div><div class="rc" id="rc"></div>';
+  } else {
+    html += '<div class="tip">' + (r === 'win' ? '' : 'Win a match to earn a random wrestler card. A duplicate turns one teammate in that hand into another star.') + '</div>';
+  }
+  html += '<div class="btns"><button class="btn" id="rAgain">PLAY AGAIN</button><button class="btn alt" id="rColl">COLLECTION</button><button class="btn alt" id="rHome">HOME</button></div>';
+  var res = $('result');
+  res.innerHTML = html; res.classList.add('on');
+  if (reward) {
+    var el = mkEl(starCard(reward.w), 170, 255, false);
+    $('rc').appendChild(el);
+  }
+  $('rAgain').onclick = function () { startMatch(); };
+  $('rColl').onclick = function () { M = null; show('coll'); };
+  $('rHome').onclick = function () { M = null; show('home'); };
+}
+
+fit();
+renderHome();
+})();
+</script>
+</body>
+</html>
