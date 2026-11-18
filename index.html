@@ -181,7 +181,13 @@ var W = [
   {id:'punk',  name:'CM Punk',      short:'PUNK',   init:'CP', hue:285, img:null, mate:'Danhausen'},
   {id:'austin',name:'Stone Cold Steve Austin', short:'AUSTIN', init:'SA', hue:45, img:null, mate:'Dude Love'}
 ];
-var MATE_VALS = [4,3,3,2,2,1,1];  /* teammate numbers; fewer teammates keep the strongest */
+var MATE_VALS = [5,4,3,2,1,0,3];  /* minion numbers, 0-5; fewer minions keep the strongest */
+var ACTS = [
+  {act:'kick', name:'KICK OUT',  sym:'✖', txt:'CANCELS BOTH CARDS'},
+  {act:'rev',  name:'REVERSAL',  sym:'↺', txt:'ANSWER: THEIR HIT HITS THEM'},
+  {act:'rec',  name:'RECOVER',   sym:'+', txt:'HEAL 5'},
+  {act:'mom',  name:'MOMENTUM',  sym:'▲', txt:'YOUR NEXT CARD +3'}
+];
 var AB = {
   tie:    'WINS TIES',
   rally:  'IF BEATEN: +2 CHARGE',
@@ -189,7 +195,7 @@ var AB = {
   lead:   '+1 WHEN LEADING'
 };
 var METER_MAX = 3, METER_BONUS = 2;
-var STAR_DMG = 5, START_HP = 20, STEP = 4.85;
+var STAR_DMG = 10, START_HP = 30, STEP = 4.85;
 var wById = {}; W.forEach(function (w) { wById[w.id] = w; });
 
 /* ---------- helpers ---------- */
@@ -243,17 +249,23 @@ function starCard(w) { return mk({star:true, ab:w.sab, dmg:STAR_DMG, name:w.shor
 function buildHand(w, copies) {
   var cards = [];
   for (var i = 0; i < copies; i++) cards.push(starCard(w));
-  for (var j = 0; j < 8 - copies; j++) cards.push(mk({star:false, ab:w.mab, dmg:MATE_VALS[j], name:w.mate, hue:0, init:w.mate.charAt(0)}));
+  var nAct = Math.min(2, 8 - copies), pool = shuffle(ACTS.slice());
+  for (var k = 0; k < nAct; k++) {
+    var a = pool[k];
+    cards.push(mk({star:false, act:a.act, dmg:0, sym:a.sym, abTxt:a.txt, name:a.name, hue:0, init:'!'}));
+  }
+  for (var j = 0; j < 8 - copies - nAct; j++) cards.push(mk({star:false, ab:w.mab, dmg:MATE_VALS[j], name:w.mate, hue:0, init:w.mate.charAt(0)}));
   return shuffle(cards);
 }
 function cardVars(c) {
+  if (c.act) return '--bd:#ffb02e;--bg2:linear-gradient(160deg,#4a3410,#1c1406);--ink2:#ffd98a';
   return c.star
     ? '--bd:hsl(' + c.hue + ' 85% 58%);--bg2:linear-gradient(160deg,hsl(' + c.hue + ' 55% 26%),hsl(' + c.hue + ' 60% 10%));--ink2:hsl(' + c.hue + ' 90% 82%)'
     : '--bd:#4a5378;--bg2:#1e2336;--ink2:#e8ebf5';
 }
 function faceHTML(c) {
-  return '<div class="top"><span class="dmg">' + c.dmg + '</span><span class="tag">' + (c.star ? 'STAR' : 'MATE') + '</span></div>' +
-         '<div class="art">' + (c.star ? c.init : '') + '</div><div class="ab">' + (AB[c.ab] || '') + '</div><div class="nm">' + c.name.toUpperCase() + '</div>';
+  return '<div class="top"><span class="dmg">' + (c.act ? c.sym : c.dmg) + '</span><span class="tag">' + (c.star ? 'STAR' : (c.act ? 'ACTION' : 'MINION')) + '</span></div>' +
+         '<div class="art">' + (c.star ? c.init : '') + '</div><div class="ab">' + (c.abTxt || AB[c.ab] || '') + '</div><div class="nm">' + c.name.toUpperCase() + '</div>';
 }
 function mkEl(c, w, h, back) {
   var e = document.createElement('div');
@@ -306,9 +318,8 @@ var M = null;
 function theta(i, n) { return 45 + ((n - 1) / 2 - i) * STEP; }
 function setStatus(t, col) { var s = $('status'); s.textContent = t; s.style.color = col || '#aab1c8'; }
 function meterStr(side) {
-  var m = M.meter[side], t = '';
-  for (var i = 0; i < METER_MAX; i++) t += i < m ? '●' : '○';
-  return '⚡' + t + (m >= METER_MAX ? ' +' + METER_BONUS : '');
+  var n = (side === 'p' ? M.ph : M.oh).length;
+  return n + ' cards' + (M.mom[side] ? ' · ▲+3' : '');
 }
 function updPanels() {
   $('oppBar').style.width = (M.hp.o / START_HP * 100) + '%';
@@ -341,7 +352,7 @@ function newRound() {
 }
 function idleStatus() {
   if (M.lead === 'p') setStatus('YOUR LEAD · TAP A CARD');
-  else if (M.pending) setStatus('THEY PLAYED ' + M.pending.eff + ' · TAP A CARD TO ANSWER');
+  else if (M.pending) setStatus('THEY PLAYED ' + (M.pending.act ? M.pending.name : M.pending.eff) + ' · TAP A CARD TO ANSWER');
 }
 function startMatch() {
   fixActive();
@@ -349,7 +360,7 @@ function startMatch() {
   var others = W.filter(function (w) { return w.id !== me.id; });
   var ow = others[rand(0, others.length - 1)];
   var oc = clamp(copies + rand(-1, 1), 1, 8);
-  M = {me:me, ow:ow, ph:buildHand(me, copies), oh:buildHand(ow, oc), hp:{p:START_HP, o:START_HP}, round:1, sel:null, busy:false, over:false, pile:0, meter:{p:0,o:0}, lead:'p', pending:null};
+  M = {me:me, ow:ow, ph:buildHand(me, copies), oh:buildHand(ow, oc), hp:{p:START_HP, o:START_HP}, round:1, sel:null, busy:false, over:false, pile:0, meter:{p:0,o:0}, mom:{p:0,o:0}, lead:'p', pending:null};
   $('hand').innerHTML = ''; $('ohand').innerHTML = ''; $('pileCards').innerHTML = '';
   $('oppName').textContent = ow.name.toUpperCase();
   $('youName').textContent = me.name.toUpperCase();
@@ -400,10 +411,12 @@ function abBonus(c, role) { return (c.ab === 'answer' && role === 'ans') || (c.a
 function effOf(side, c, role) {
   var b = M.meter[side] >= METER_MAX;
   if (b) M.meter[side] = 0;
-  var ab = abBonus(c, role);
-  c.boosted = b || ab > 0; c.eff = c.dmg + (b ? METER_BONUS : 0) + ab;
+  var ab = abBonus(c, role), mo = 0;
+  if (!c.act && M.mom[side]) { mo = M.mom[side]; M.mom[side] = 0; }
+  c.boosted = b || ab > 0 || mo > 0; c.eff = c.dmg + (b ? METER_BONUS : 0) + ab + mo;
 }
 function showEff(el, c) {
+  if (c.act) return;
   var d = el.querySelector('.dmg'); if (d) d.textContent = c.eff;
   if (c.boosted) el.classList.add('boost');
 }
@@ -439,16 +452,29 @@ async function flip(c) {
   await sleep(260);
 }
 /* opponent brain: leads low most of the time, answers with the cheapest card that wins */
+function nums(hand) { var n = hand.filter(function (x) { return !x.act; }); return n.length ? n : hand; }
+function actIn(hand, act) { return hand.filter(function (x) { return x.act === act; })[0]; }
 function aiLead() {
-  var hand = M.oh.slice().sort(function (a, b) { return (a.dmg + abBonus(a, 'lead')) - (b.dmg + abBonus(b, 'lead')); }), r = Math.random();
+  var all = M.oh.slice(), r = Math.random();
+  var rec = actIn(all, 'rec'), mom = actIn(all, 'mom');
+  if (rec && M.hp.o <= START_HP - 8 && r < 0.6) return rec;
+  if (mom && M.round <= 5 && r < 0.3) return mom;
+  var hand = nums(all).sort(function (a, b) { return (a.dmg + abBonus(a, 'lead')) - (b.dmg + abBonus(b, 'lead')); });
+  r = Math.random();
   if (r < 0.5 || hand.length === 1) return hand[0];
   if (r < 0.8) return hand[Math.max(0, hand.length - 2)];
   return hand[rand(0, hand.length - 1)];
 }
 function aiAnswer(leadEff) {
-  var bonus = M.meter.o >= METER_MAX ? METER_BONUS : 0;
+  var all = M.oh.slice();
+  var kick = actIn(all, 'kick'), rev = actIn(all, 'rev');
+  if (leadEff >= 4) {
+    if (rev && Math.random() < 0.7) return rev;
+    if (kick && Math.random() < 0.6) return kick;
+  }
+  var bonus = M.mom.o || 0;
   var val = function (x) { return x.dmg + abBonus(x, 'ans'); };
-  var hand = M.oh.slice().sort(function (a, b) { return val(a) - val(b); });
+  var hand = nums(all).sort(function (a, b) { return val(a) - val(b); });
   if (Math.random() < 0.15) return hand[rand(0, hand.length - 1)];
   var win = hand.filter(function (x) { return val(x) + bonus > leadEff; });
   return win.length ? win[0] : hand[0];
@@ -477,23 +503,37 @@ async function answer(c) {
   var oc = M.pending; M.pending = null;
   await resolve(c, oc);
 }
+function hurt(side, n) {
+  if (side === 'p') { M.hp.p = Math.max(0, M.hp.p - n); floatTxt('−' + n, 'p'); }
+  else { M.hp.o = Math.max(0, M.hp.o - n); floatTxt('−' + n, 'o'); }
+}
 async function resolve(pc, oc) {
-  var fp = pc.fly, fo = oc.fly, dp = pc.eff, dO = oc.eff, txt, col, tieWin = '';
-  if (dp === dO) {
-    if (pc.ab === 'tie' && oc.ab !== 'tie') { dO = 0; tieWin = 'p'; }
-    else if (oc.ab === 'tie' && pc.ab !== 'tie') { dp = 0; tieWin = 'o'; }
-  }
-  if (dp > dO || tieWin === 'p') {
-    var hit = pc.eff; M.hp.o = Math.max(0, M.hp.o - hit); M.meter.o = Math.min(METER_MAX, M.meter.o + (oc.ab === 'rally' ? 2 : 1));
-    txt = (tieWin ? 'TIE · ' + pc.name + ' WINS · ' : 'YOU HIT · ') + '−' + hit; col = '#2fb5a3'; fp.classList.add('win'); fo.classList.add('lose'); floatTxt('−' + hit, 'o');
-  } else if (dO > dp || tieWin === 'o') {
-    var hit2 = oc.eff; M.hp.p = Math.max(0, M.hp.p - hit2); M.meter.p = Math.min(METER_MAX, M.meter.p + (pc.ab === 'rally' ? 2 : 1));
-    txt = (tieWin ? 'TIE · ' + oc.name + ' WINS · ' : 'THEY HIT · ') + '−' + hit2; col = '#ff6b6b'; fo.classList.add('win'); fp.classList.add('lose'); floatTxt('−' + hit2, 'p');
-  } else { txt = 'STALEMATE · NO DAMAGE'; col = '#aab1c8'; }
+  var fp = pc.fly, fo = oc.fly, txt = '', col = '#aab1c8', pw = false, ow = false;
+  var leadP = M.lead === 'p', leader = leadP ? pc : oc, ans = leadP ? oc : pc;
+  var kick = pc.act === 'kick' || oc.act === 'kick';
+  if (kick) {
+    txt = 'KICK OUT · NO DAMAGE';
+  } else if (ans.act === 'rev' && !leader.act && leader.eff > 0) {
+    hurt(leadP ? 'p' : 'o', leader.eff);
+    txt = 'REVERSAL! THEY TAKE −' + leader.eff;
+    if (leadP) { ow = true; col = '#ff6b6b'; txt = 'REVERSED! YOU TAKE −' + leader.eff; }
+    else { pw = true; col = '#2fb5a3'; txt = 'REVERSAL! THEY TAKE −' + leader.eff; }
+  } else if (pc.eff > oc.eff) {
+    hurt('o', pc.eff); pw = true; col = '#2fb5a3'; txt = 'YOU HIT · −' + pc.eff;
+  } else if (oc.eff > pc.eff) {
+    hurt('p', oc.eff); ow = true; col = '#ff6b6b'; txt = 'THEY HIT · −' + oc.eff;
+  } else { txt = 'STALEMATE · NO DAMAGE'; }
+  [['p', pc], ['o', oc]].forEach(function (x) {
+    var side = x[0], c = x[1];
+    if (c.act === 'rec') { M[side === 'p' ? 'hp' : 'hp'][side] = Math.min(START_HP, M.hp[side] + 5); floatTxt('+5', side); txt += ' · HEAL +5'; }
+    if (c.act === 'mom') { M.mom[side] = 3; }
+  });
+  if (pw) { fp.classList.add('win'); fo.classList.add('lose'); }
+  if (ow) { fo.classList.add('win'); fp.classList.add('lose'); }
   M.pile += 2;
   $('pileLbl').textContent = 'PLAY PILE · ' + M.pile + ' CARDS';
   setStatus(txt, col); updPanels();
-  await sleep(1100);
+  await sleep(1300);
   if (!M) return;
   if (M.hp.p <= 0 || M.hp.o <= 0 || M.ph.length === 0) { finish(); }
   else { M.round++; M.busy = false; newRound(); }
