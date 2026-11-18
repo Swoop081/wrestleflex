@@ -42,6 +42,7 @@ html,body{margin:0;width:100%;height:100%;position:fixed;overflow:hidden;overscr
 .card.old{filter:brightness(.62)}
 .card.win{box-shadow:0 0 20px #2fb5a3}
 .card.lose{opacity:.6}
+.card .ab{font-size:7.5px;font-weight:700;letter-spacing:.04em;text-align:center;color:#ffd25a;line-height:1.1;min-height:9px}
 .card.boost{box-shadow:0 0 18px #ffd25a}
 .card.boost .dmg{color:#ffd25a}
 
@@ -175,10 +176,16 @@ html,body{margin:0;width:100%;height:100%;position:fixed;overflow:hidden;overscr
 
 /* ---------- data (all names are invented placeholders) ---------- */
 var W = [
-  {id:'roman', name:'Roman Reigns', short:'REIGNS', init:'RR', hue:215, img:'cards/roman.jpg', mate:'Jimmy Uso'},
-  {id:'cody',  name:'Cody Rhodes',  short:'RHODES', init:'CR', hue:355, img:null,              mate:'Matt Cardona'}
+  {id:'roman', name:'Roman Reigns', short:'REIGNS', init:'RR', hue:215, img:'cards/roman.jpg', mate:'Jimmy Uso', sab:'tie', mab:'answer'},
+  {id:'cody',  name:'Cody Rhodes',  short:'RHODES', init:'CR', hue:355, img:null,              mate:'Matt Cardona', sab:'rally', mab:'lead'}
 ];
 var MATE_VALS = [4,3,3,2,2,1,1];  /* teammate numbers; fewer teammates keep the strongest */
+var AB = {
+  tie:    'WINS TIES',
+  rally:  'IF BEATEN: +2 CHARGE',
+  answer: '+1 WHEN ANSWERING',
+  lead:   '+1 WHEN LEADING'
+};
 var METER_MAX = 3, METER_BONUS = 2;
 var STAR_DMG = 5, START_HP = 20, STEP = 4.85;
 var wById = {}; W.forEach(function (w) { wById[w.id] = w; });
@@ -230,11 +237,11 @@ window.addEventListener('orientationchange', function () { setTimeout(fit, 150);
 /* ---------- cards ---------- */
 var uid = 0;
 function mk(base) { base.uid = ++uid; return base; }
-function starCard(w) { return mk({star:true, dmg:STAR_DMG, name:w.short, hue:w.hue, init:w.init, img:w.img}); }
+function starCard(w) { return mk({star:true, ab:w.sab, dmg:STAR_DMG, name:w.short, hue:w.hue, init:w.init, img:w.img}); }
 function buildHand(w, copies) {
   var cards = [];
   for (var i = 0; i < copies; i++) cards.push(starCard(w));
-  for (var j = 0; j < 8 - copies; j++) cards.push(mk({star:false, dmg:MATE_VALS[j], name:w.mate, hue:0, init:w.mate.charAt(0)}));
+  for (var j = 0; j < 8 - copies; j++) cards.push(mk({star:false, ab:w.mab, dmg:MATE_VALS[j], name:w.mate, hue:0, init:w.mate.charAt(0)}));
   return shuffle(cards);
 }
 function cardVars(c) {
@@ -244,7 +251,7 @@ function cardVars(c) {
 }
 function faceHTML(c) {
   return '<div class="top"><span class="dmg">' + c.dmg + '</span><span class="tag">' + (c.star ? 'STAR' : 'MATE') + '</span></div>' +
-         '<div class="art">' + (c.star ? c.init : '') + '</div><div class="nm">' + c.name.toUpperCase() + '</div>';
+         '<div class="art">' + (c.star ? c.init : '') + '</div><div class="ab">' + (AB[c.ab] || '') + '</div><div class="nm">' + c.name.toUpperCase() + '</div>';
 }
 function mkEl(c, w, h, back) {
   var e = document.createElement('div');
@@ -387,10 +394,12 @@ function clearPile() {
   Array.prototype.forEach.call($('pileCards').querySelectorAll('.card'), function (e) { e.classList.add('old'); e.classList.remove('win', 'lose'); });
 }
 /* a charged meter adds a bonus to the next card played, then empties */
-function effOf(side, c) {
+function abBonus(c, role) { return (c.ab === 'answer' && role === 'ans') || (c.ab === 'lead' && role === 'lead') ? 1 : 0; }
+function effOf(side, c, role) {
   var b = M.meter[side] >= METER_MAX;
   if (b) M.meter[side] = 0;
-  c.boosted = b; c.eff = c.dmg + (b ? METER_BONUS : 0);
+  var ab = abBonus(c, role);
+  c.boosted = b || ab > 0; c.eff = c.dmg + (b ? METER_BONUS : 0) + ab;
 }
 function showEff(el, c) {
   var d = el.querySelector('.dmg'); if (d) d.textContent = c.eff;
@@ -429,23 +438,24 @@ async function flip(c) {
 }
 /* opponent brain: leads low most of the time, answers with the cheapest card that wins */
 function aiLead() {
-  var hand = M.oh.slice().sort(function (a, b) { return a.dmg - b.dmg; }), r = Math.random();
+  var hand = M.oh.slice().sort(function (a, b) { return (a.dmg + abBonus(a, 'lead')) - (b.dmg + abBonus(b, 'lead')); }), r = Math.random();
   if (r < 0.5 || hand.length === 1) return hand[0];
   if (r < 0.8) return hand[Math.max(0, hand.length - 2)];
   return hand[rand(0, hand.length - 1)];
 }
 function aiAnswer(leadEff) {
   var bonus = M.meter.o >= METER_MAX ? METER_BONUS : 0;
-  var hand = M.oh.slice().sort(function (a, b) { return a.dmg - b.dmg; });
+  var val = function (x) { return x.dmg + abBonus(x, 'ans'); };
+  var hand = M.oh.slice().sort(function (a, b) { return val(a) - val(b); });
   if (Math.random() < 0.15) return hand[rand(0, hand.length - 1)];
-  var win = hand.filter(function (x) { return x.dmg + bonus > leadEff; });
+  var win = hand.filter(function (x) { return val(x) + bonus > leadEff; });
   return win.length ? win[0] : hand[0];
 }
 async function playerLead(c) {
   M.busy = true; M.sel = null; clearPile(); setStatus('');
-  effOf('p', c);
+  effOf('p', c, 'lead');
   await fly(c, 'p');
-  var oc = aiAnswer(c.eff); effOf('o', oc);
+  var oc = aiAnswer(c.eff); effOf('o', oc, 'ans');
   await fly(oc, 'o'); await flip(oc);
   await resolve(c, oc);
 }
@@ -453,23 +463,31 @@ async function oppLeads() {
   M.busy = true; clearPile(); setStatus('THEY LEAD…');
   await sleep(450);
   if (!M) return;
-  var oc = aiLead(); effOf('o', oc);
+  var oc = aiLead(); effOf('o', oc, 'lead');
   await fly(oc, 'o'); await flip(oc);
   if (!M) return;
   M.pending = oc; M.busy = false; idleStatus(); updPanels();
 }
 async function answer(c) {
   M.busy = true; M.sel = null; setStatus('');
-  effOf('p', c);
+  effOf('p', c, 'ans');
   await fly(c, 'p');
   var oc = M.pending; M.pending = null;
   await resolve(c, oc);
 }
 async function resolve(pc, oc) {
-  var fp = pc.fly, fo = oc.fly, dp = pc.eff, dO = oc.eff, txt, col;
-  if (dp > dO) { M.hp.o = Math.max(0, M.hp.o - dp); M.meter.o = Math.min(METER_MAX, M.meter.o + 1); txt = 'YOU HIT · −' + dp; col = '#2fb5a3'; fp.classList.add('win'); fo.classList.add('lose'); floatTxt('−' + dp, 'o'); }
-  else if (dO > dp) { M.hp.p = Math.max(0, M.hp.p - dO); M.meter.p = Math.min(METER_MAX, M.meter.p + 1); txt = 'THEY HIT · −' + dO; col = '#ff6b6b'; fo.classList.add('win'); fp.classList.add('lose'); floatTxt('−' + dO, 'p'); }
-  else { txt = 'STALEMATE · NO DAMAGE'; col = '#aab1c8'; }
+  var fp = pc.fly, fo = oc.fly, dp = pc.eff, dO = oc.eff, txt, col, tieWin = '';
+  if (dp === dO) {
+    if (pc.ab === 'tie' && oc.ab !== 'tie') { dO = 0; tieWin = 'p'; }
+    else if (oc.ab === 'tie' && pc.ab !== 'tie') { dp = 0; tieWin = 'o'; }
+  }
+  if (dp > dO || tieWin === 'p') {
+    var hit = pc.eff; M.hp.o = Math.max(0, M.hp.o - hit); M.meter.o = Math.min(METER_MAX, M.meter.o + (oc.ab === 'rally' ? 2 : 1));
+    txt = (tieWin ? 'TIE · ' + pc.name + ' WINS · ' : 'YOU HIT · ') + '−' + hit; col = '#2fb5a3'; fp.classList.add('win'); fo.classList.add('lose'); floatTxt('−' + hit, 'o');
+  } else if (dO > dp || tieWin === 'o') {
+    var hit2 = oc.eff; M.hp.p = Math.max(0, M.hp.p - hit2); M.meter.p = Math.min(METER_MAX, M.meter.p + (pc.ab === 'rally' ? 2 : 1));
+    txt = (tieWin ? 'TIE · ' + oc.name + ' WINS · ' : 'THEY HIT · ') + '−' + hit2; col = '#ff6b6b'; fo.classList.add('win'); fp.classList.add('lose'); floatTxt('−' + hit2, 'p');
+  } else { txt = 'STALEMATE · NO DAMAGE'; col = '#aab1c8'; }
   M.pile += 2;
   $('pileLbl').textContent = 'PLAY PILE · ' + M.pile + ' CARDS';
   setStatus(txt, col); updPanels();
