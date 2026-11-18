@@ -63,6 +63,11 @@ html,body{margin:0;width:100%;height:100%;position:fixed;overflow:hidden;overscr
 .bar{margin-top:8px;height:10px;border-radius:5px;background:#2a3048;overflow:hidden}
 .bar>div{height:10px;border-radius:5px;transition:width .5s}
 .panel .ln{margin-top:6px;font-size:11px;font-weight:600;color:#aab1c8}
+#match.lefty #hand{right:auto;left:-110px}
+#match.lefty #ohand{left:auto;right:-95px}
+#match.lefty #oppPanel{right:auto;left:16px;text-align:left}
+#match.lefty #youPanel{left:auto;right:14px;text-align:right}
+#match.lefty #quit{left:auto;right:164px}
 #oppPanel{right:14px;top:calc(var(--sat) + 12px);text-align:right}
 #youPanel{left:16px;bottom:calc(var(--sab) + 22px)}
 #quit{position:absolute;left:164px;top:calc(var(--sat) + 12px);z-index:30;height:34px;padding:0 14px;border-radius:17px;border:1px solid #4a5378;background:rgba(20,24,39,.8);color:#aab1c8;font:600 11px 'Inter',sans-serif;letter-spacing:.08em}
@@ -130,6 +135,7 @@ html,body{margin:0;width:100%;height:100%;position:fixed;overflow:hidden;overscr
     <div id="homeBtns">
       <button class="btn" id="goPlay">PLAY</button>
       <button class="btn alt" id="goColl">COLLECTION</button>
+      <button class="btn alt small" id="goHand"></button>
     </div>
   </div>
 
@@ -210,7 +216,7 @@ function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = rand(0, i
 
 /* ---------- save ---------- */
 var KEY = 'wcg_save_v2';
-var save = {copies:{roman:1}, active:'roman', wins:0, losses:0, draws:0};
+var save = {copies:{roman:1}, active:'roman', wins:0, losses:0, draws:0, lefty:false};
 try {
   var raw = localStorage.getItem(KEY);
   if (raw) { var o = JSON.parse(raw); if (o && o.copies) { for (var k in o) save[k] = o[k]; } }
@@ -288,6 +294,7 @@ function show(id) {
   if (id === 'coll') renderColl();
 }
 function renderHome() {
+  $('goHand').textContent = save.lefty ? 'LEFT-HANDED · TAP TO SWITCH' : 'RIGHT-HANDED · TAP TO SWITCH';
   var w = wById[save.active], n = save.copies[w.id];
   var box = $('homeCard'); box.innerHTML = '';
   var el = mkEl(starCard(w), 150, 225, false); el.style.left = '0'; el.style.top = '0';
@@ -312,6 +319,7 @@ function renderColl() {
 }
 $('goPlay').onclick = function () { startMatch(); };
 $('goColl').onclick = function () { show('coll'); };
+$('goHand').onclick = function () { save.lefty = !save.lefty; persist(); renderHome(); };
 $('collBack').onclick = function () { show('home'); };
 $('tAdd').onclick = function () { save.copies[save.active] = Math.min(8, (save.copies[save.active] || 0) + 1); persist(); renderColl(); };
 $('tAll').onclick = function () { W.forEach(function (w) { if (!save.copies[w.id]) save.copies[w.id] = 1; }); persist(); renderColl(); };
@@ -319,6 +327,7 @@ $('tReset').onclick = function () { save = {copies:{roman:1}, active:'roman', wi
 
 /* ---------- match ---------- */
 var M = null;
+function SG() { return save.lefty ? -1 : 1; }
 function theta(i, n) { return 45 + ((n - 1) / 2 - i) * STEP; }
 function setStatus(t, col) { var s = $('status'); s.textContent = t; s.style.color = col || '#aab1c8'; }
 function meterStr(side) {
@@ -335,16 +344,16 @@ function layout() {
   var n = M.ph.length;
   M.ph.forEach(function (c, i) {
     var t = theta(i, n), el = c.el, sel = (M.sel === c);
-    el._rot = -t;
-    el.style.transform = 'rotate(' + (-t) + 'deg)' + (sel ? ' translateY(-80px)' : '');
-    el.style.zIndex = sel ? 60 : i;
+    el._rot = -t * SG();
+    el.style.transform = 'rotate(' + (-t * SG()) + 'deg)' + (sel ? ' translateY(-80px)' : '');
+    el.style.zIndex = sel ? 60 : (save.lefty ? n - i : i);
     el.classList.toggle('sel', sel);
   });
   var m = M.oh.length;
   M.oh.forEach(function (c, i) {
     var t = theta(i, m);
-    c.el._rot = 180 - t;
-    c.el.style.transform = 'rotate(' + (-t) + 'deg)';
+    c.el._rot = 180 - t * SG();
+    c.el.style.transform = 'rotate(' + (-t * SG()) + 'deg)';
   });
   updPanels();
 }
@@ -370,6 +379,7 @@ function startMatch() {
   $('youName').textContent = me.name.toUpperCase();
   M.ph.forEach(function (c) { c.el = mkEl(c, 100, 190, false); c.el.classList.add('h'); $('hand').appendChild(c.el); });
   M.oh.forEach(function (c) { c.el = mkEl(c, 80, 120, true); c.el.classList.add('o'); $('ohand').appendChild(c.el); });
+  $('match').classList.toggle('lefty', !!save.lefty);
   show('match');
   layout();
   newRound();
