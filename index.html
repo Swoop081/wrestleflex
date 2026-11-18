@@ -42,6 +42,8 @@ html,body{margin:0;width:100%;height:100%;position:fixed;overflow:hidden;overscr
 .card.old{filter:brightness(.62)}
 .card.win{box-shadow:0 0 20px #2fb5a3}
 .card.lose{opacity:.6}
+.card.boost{box-shadow:0 0 18px #ffd25a}
+.card.boost .dmg{color:#ffd25a}
 
 /* match */
 #ohand{position:absolute;left:-95px;top:-95px;width:0;height:0;transform-origin:0 0;transform:rotate(180deg);z-index:1}
@@ -176,7 +178,8 @@ var W = [
   {id:'roman', name:'Roman Reigns', short:'REIGNS', init:'RR', hue:215, img:'cards/roman.jpg', mate:'Jimmy Uso'},
   {id:'cody',  name:'Cody Rhodes',  short:'RHODES', init:'CR', hue:355, img:null,              mate:'Matt Cardona'}
 ];
-var MATE_DMG = 1;
+var MATE_VALS = [4,3,3,2,2,1,1];  /* teammate numbers; fewer teammates keep the strongest */
+var METER_MAX = 3, METER_BONUS = 2;
 var STAR_DMG = 5, START_HP = 20, STEP = 4.85;
 var wById = {}; W.forEach(function (w) { wById[w.id] = w; });
 
@@ -231,7 +234,7 @@ function starCard(w) { return mk({star:true, dmg:STAR_DMG, name:w.short, hue:w.h
 function buildHand(w, copies) {
   var cards = [];
   for (var i = 0; i < copies; i++) cards.push(starCard(w));
-  for (var j = 0; j < 8 - copies; j++) cards.push(mk({star:false, dmg:MATE_DMG, name:w.mate, hue:0, init:w.mate.charAt(0)}));
+  for (var j = 0; j < 8 - copies; j++) cards.push(mk({star:false, dmg:MATE_VALS[j], name:w.mate, hue:0, init:w.mate.charAt(0)}));
   return shuffle(cards);
 }
 function cardVars(c) {
@@ -293,11 +296,16 @@ $('tReset').onclick = function () { save = {copies:{roman:1}, active:'roman', wi
 var M = null;
 function theta(i, n) { return 45 + ((n - 1) / 2 - i) * STEP; }
 function setStatus(t, col) { var s = $('status'); s.textContent = t; s.style.color = col || '#aab1c8'; }
+function meterStr(side) {
+  var m = M.meter[side], t = '';
+  for (var i = 0; i < METER_MAX; i++) t += i < m ? '●' : '○';
+  return '⚡' + t + (m >= METER_MAX ? ' +' + METER_BONUS : '');
+}
 function updPanels() {
   $('oppBar').style.width = (M.hp.o / START_HP * 100) + '%';
   $('youBar').style.width = (M.hp.p / START_HP * 100) + '%';
-  $('oppLn').textContent = 'HP ' + M.hp.o + ' / ' + START_HP + ' · ' + M.oh.length + ' cards';
-  $('youLn').textContent = 'HP ' + M.hp.p + ' / ' + START_HP + ' · ' + M.ph.length + ' cards';
+  $('oppLn').textContent = 'HP ' + M.hp.o + ' / ' + START_HP + ' · ' + meterStr('o');
+  $('youLn').textContent = 'HP ' + M.hp.p + ' / ' + START_HP + ' · ' + meterStr('p');
 }
 function layout() {
   var n = M.ph.length;
@@ -319,7 +327,12 @@ function layout() {
 function newRound() {
   $('roundT').textContent = 'ROUND ' + M.round + ' / 8';
   $('pileLbl').textContent = M.pile ? 'PLAY PILE · ' + M.pile + ' CARDS' : 'PLAY PILE';
-  setStatus('YOUR MOVE · TAP A CARD');
+  M.lead = (M.round % 2 === 1) ? 'p' : 'o';
+  if (M.lead === 'p') idleStatus(); else oppLeads();
+}
+function idleStatus() {
+  if (M.lead === 'p') setStatus('YOUR LEAD · TAP A CARD');
+  else if (M.pending) setStatus('THEY PLAYED ' + M.pending.eff + ' · TAP A CARD TO ANSWER');
 }
 function startMatch() {
   fixActive();
@@ -327,7 +340,7 @@ function startMatch() {
   var others = W.filter(function (w) { return w.id !== me.id; });
   var ow = others[rand(0, others.length - 1)];
   var oc = clamp(copies + rand(-1, 1), 1, 8);
-  M = {me:me, ow:ow, ph:buildHand(me, copies), oh:buildHand(ow, oc), hp:{p:START_HP, o:START_HP}, round:1, sel:null, busy:false, over:false, pile:0};
+  M = {me:me, ow:ow, ph:buildHand(me, copies), oh:buildHand(ow, oc), hp:{p:START_HP, o:START_HP}, round:1, sel:null, busy:false, over:false, pile:0, meter:{p:0,o:0}, lead:'p', pending:null};
   $('hand').innerHTML = ''; $('ohand').innerHTML = ''; $('pileCards').innerHTML = '';
   $('oppName').textContent = ow.name.toUpperCase();
   $('youName').textContent = me.name.toUpperCase();
@@ -343,12 +356,12 @@ $('hand').addEventListener('click', function (e) {
   if (!el) return;
   var c = M.ph.filter(function (x) { return x.el === el; })[0];
   if (!c) return;
-  if (M.sel === c) { play(c); }
-  else { M.sel = c; setStatus('TAP AGAIN TO PLAY'); layout(); }
+  if (M.sel === c) { if (M.lead === 'p') playerLead(c); else answer(c); }
+  else { M.sel = c; setStatus(M.lead === 'p' ? 'TAP AGAIN TO LEAD' : 'TAP AGAIN TO ANSWER'); layout(); }
 });
 $('match').addEventListener('click', function (e) {
   if (M && !M.busy && !M.over && M.sel && !(e.target.closest && e.target.closest('.card'))) {
-    M.sel = null; setStatus('YOUR MOVE · TAP A CARD'); layout();
+    M.sel = null; idleStatus(); layout();
   }
 });
 $('quit').onclick = function () { M = null; show('home'); };
@@ -370,38 +383,92 @@ function floatTxt(txt, who) {
   setTimeout(function () { if (f.parentNode) f.parentNode.removeChild(f); }, 1000);
 }
 
-async function play(c) {
-  M.busy = true; M.sel = null;
-  var oc = M.oh[rand(0, M.oh.length - 1)];
-  var pe = c.el, oe = oc.el;
-  var pc = ctr(pe.getBoundingClientRect()), ocn = ctr(oe.getBoundingClientRect());
-  var rp = pe._rot, ro = oe._rot;
-  M.ph = M.ph.filter(function (x) { return x !== c; });
-  M.oh = M.oh.filter(function (x) { return x !== oc; });
-  pe.parentNode.removeChild(pe); oe.parentNode.removeChild(oe);
-  var cards = $('pileCards');
-  Array.prototype.forEach.call(cards.querySelectorAll('.card'), function (e) { e.classList.add('old'); e.classList.remove('win', 'lose'); });
-  var fp = mkEl(c, 100, 190, false), fo = mkEl(oc, 80, 120, true);
-  place(fp, pc, 100, 190, rp); place(fo, ocn, 80, 120, ro);
-  cards.appendChild(fp); cards.appendChild(fo);
-  setStatus('');
+function clearPile() {
+  Array.prototype.forEach.call($('pileCards').querySelectorAll('.card'), function (e) { e.classList.add('old'); e.classList.remove('win', 'lose'); });
+}
+/* a charged meter adds a bonus to the next card played, then empties */
+function effOf(side, c) {
+  var b = M.meter[side] >= METER_MAX;
+  if (b) M.meter[side] = 0;
+  c.boosted = b; c.eff = c.dmg + (b ? METER_BONUS : 0);
+}
+function showEff(el, c) {
+  var d = el.querySelector('.dmg'); if (d) d.textContent = c.eff;
+  if (c.boosted) el.classList.add('boost');
+}
+async function fly(c, side) {
+  var mine = side === 'p', e = c.el;
+  var cn = ctr(e.getBoundingClientRect()), rot = e._rot;
+  if (mine) M.ph = M.ph.filter(function (x) { return x !== c; });
+  else M.oh = M.oh.filter(function (x) { return x !== c; });
+  e.parentNode.removeChild(e);
+  var w = mine ? 100 : 80, h = mine ? 190 : 120;
+  var f = mkEl(c, w, h, !mine);
+  if (mine) showEff(f, c);
+  place(f, cn, w, h, rot);
+  $('pileCards').appendChild(f);
   layout();
-  void fp.offsetWidth;
+  void f.offsetWidth;
   var j = function () { return rand(-5, 5); };
-  var tp = {x:24 + j(), y:30 + j(), r:rand(2, 10)}, to = {x:-24 + j(), y:-30 + j(), r:rand(-10, -2)};
+  var t = mine ? {x:24 + j(), y:30 + j(), r:rand(2, 10)} : {x:-24 + j(), y:-30 + j(), r:rand(-10, -2)};
   var ease = 'cubic-bezier(.2,.8,.2,1)';
-  var tr = 'left .5s ' + ease + ',top .5s ' + ease + ',width .5s,height .5s,transform .5s ' + ease;
-  fp.style.transition = tr; fo.style.transition = tr;
-  fp.style.left = (tp.x - 42) + 'px'; fp.style.top = (tp.y - 59) + 'px'; fp.style.width = '84px'; fp.style.height = '118px'; fp.style.transform = 'rotate(' + tp.r + 'deg)';
-  fo.style.left = (to.x - 42) + 'px'; fo.style.top = (to.y - 59) + 'px'; fo.style.width = '84px'; fo.style.height = '118px'; fo.style.transform = 'rotate(' + to.r + 'deg)';
+  f.style.transition = 'left .5s ' + ease + ',top .5s ' + ease + ',width .5s,height .5s,transform .5s ' + ease;
+  f.style.left = (t.x - 42) + 'px'; f.style.top = (t.y - 59) + 'px';
+  f.style.width = '84px'; f.style.height = '118px';
+  f.style.transform = 'rotate(' + t.r + 'deg)';
+  c.fly = f; c.tr = t.r;
   await sleep(620);
-  fo.style.transition = 'transform .15s'; fo.style.transform = 'rotate(' + to.r + 'deg) scaleX(0)';
+}
+async function flip(c) {
+  var f = c.fly;
+  f.style.transition = 'transform .15s'; f.style.transform = 'rotate(' + c.tr + 'deg) scaleX(0)';
   await sleep(160);
-  fo.classList.remove('back'); fo.style.transform = 'rotate(' + to.r + 'deg) scaleX(1)';
+  f.classList.remove('back'); showEff(f, c);
+  f.style.transform = 'rotate(' + c.tr + 'deg) scaleX(1)';
   await sleep(260);
-  var dp = c.dmg, dO = oc.dmg, txt, col;
-  if (dp > dO) { M.hp.o = Math.max(0, M.hp.o - dp); txt = 'YOU HIT · −' + dp; col = '#2fb5a3'; fp.classList.add('win'); fo.classList.add('lose'); floatTxt('−' + dp, 'o'); }
-  else if (dO > dp) { M.hp.p = Math.max(0, M.hp.p - dO); txt = 'THEY HIT · −' + dO; col = '#ff6b6b'; fo.classList.add('win'); fp.classList.add('lose'); floatTxt('−' + dO, 'p'); }
+}
+/* opponent brain: leads low most of the time, answers with the cheapest card that wins */
+function aiLead() {
+  var hand = M.oh.slice().sort(function (a, b) { return a.dmg - b.dmg; }), r = Math.random();
+  if (r < 0.5 || hand.length === 1) return hand[0];
+  if (r < 0.8) return hand[Math.max(0, hand.length - 2)];
+  return hand[rand(0, hand.length - 1)];
+}
+function aiAnswer(leadEff) {
+  var bonus = M.meter.o >= METER_MAX ? METER_BONUS : 0;
+  var hand = M.oh.slice().sort(function (a, b) { return a.dmg - b.dmg; });
+  if (Math.random() < 0.15) return hand[rand(0, hand.length - 1)];
+  var win = hand.filter(function (x) { return x.dmg + bonus > leadEff; });
+  return win.length ? win[0] : hand[0];
+}
+async function playerLead(c) {
+  M.busy = true; M.sel = null; clearPile(); setStatus('');
+  effOf('p', c);
+  await fly(c, 'p');
+  var oc = aiAnswer(c.eff); effOf('o', oc);
+  await fly(oc, 'o'); await flip(oc);
+  await resolve(c, oc);
+}
+async function oppLeads() {
+  M.busy = true; clearPile(); setStatus('THEY LEAD…');
+  await sleep(450);
+  if (!M) return;
+  var oc = aiLead(); effOf('o', oc);
+  await fly(oc, 'o'); await flip(oc);
+  if (!M) return;
+  M.pending = oc; M.busy = false; idleStatus(); updPanels();
+}
+async function answer(c) {
+  M.busy = true; M.sel = null; setStatus('');
+  effOf('p', c);
+  await fly(c, 'p');
+  var oc = M.pending; M.pending = null;
+  await resolve(c, oc);
+}
+async function resolve(pc, oc) {
+  var fp = pc.fly, fo = oc.fly, dp = pc.eff, dO = oc.eff, txt, col;
+  if (dp > dO) { M.hp.o = Math.max(0, M.hp.o - dp); M.meter.o = Math.min(METER_MAX, M.meter.o + 1); txt = 'YOU HIT · −' + dp; col = '#2fb5a3'; fp.classList.add('win'); fo.classList.add('lose'); floatTxt('−' + dp, 'o'); }
+  else if (dO > dp) { M.hp.p = Math.max(0, M.hp.p - dO); M.meter.p = Math.min(METER_MAX, M.meter.p + 1); txt = 'THEY HIT · −' + dO; col = '#ff6b6b'; fo.classList.add('win'); fp.classList.add('lose'); floatTxt('−' + dO, 'p'); }
   else { txt = 'STALEMATE · NO DAMAGE'; col = '#aab1c8'; }
   M.pile += 2;
   $('pileLbl').textContent = 'PLAY PILE · ' + M.pile + ' CARDS';
