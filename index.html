@@ -32,6 +32,8 @@ html,body{margin:0;width:100%;height:100%;position:fixed;overflow:hidden;overscr
   background:repeating-linear-gradient(135deg,rgba(255,255,255,.07) 0,rgba(255,255,255,.07) 6px,rgba(255,255,255,.02) 6px,rgba(255,255,255,.02) 12px);
   font-family:'Bebas Neue','Arial Narrow',Impact,sans-serif;font-size:34px;letter-spacing:.06em}
 .card .nm{font-size:11px;font-weight:600;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card.ph .art{visibility:hidden}
+.card.ph .dmg,.card.ph .tag,.card.ph .nm{color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.85)}
 .card.back{background:repeating-linear-gradient(45deg,#3b1219 0,#3b1219 8px,#2a0c12 8px,#2a0c12 16px);border-color:#7a2630;box-shadow:inset 0 0 0 4px #1a0a0e,0 2px 8px rgba(0,0,0,.5)}
 .card.back>*{display:none}
 .card.h{left:-50px;top:-360px;transform-origin:50px 360px;cursor:pointer}
@@ -171,19 +173,10 @@ html,body{margin:0;width:100%;height:100%;position:fixed;overflow:hidden;overscr
 
 /* ---------- data (all names are invented placeholders) ---------- */
 var W = [
-  {id:'mako',  name:'Iron Mako',     init:'IM', hue:210},
-  {id:'vex',   name:'Crimson Vex',   init:'CV', hue:355},
-  {id:'hollow',name:'Dusty Hollow',  init:'DH', hue:35},
-  {id:'tau',   name:'Tidal Tau',     init:'TT', hue:175},
-  {id:'nova',  name:'Nova Reyes',    init:'NR', hue:285},
-  {id:'under', name:'The Undertow',  init:'TU', hue:235},
-  {id:'rex',   name:'Rex Calloway',  init:'RC', hue:52},
-  {id:'volt',  name:'Saint Voltage', init:'SV', hue:140}
+  {id:'roman', name:'Roman Reigns', short:'REIGNS', init:'RR', hue:215, img:'cards/roman.jpg', mate:'Jimmy Uso'},
+  {id:'cody',  name:'Cody Rhodes',  short:'RHODES', init:'CR', hue:355, img:null,              mate:'Matt Cardona'}
 ];
-var MATES = [
-  {d:1,n:'Rookie'},{d:1,n:'Pal'},{d:2,n:'Enforcer'},{d:2,n:'Partner'},
-  {d:2,n:'Manager'},{d:3,n:'Veteran'},{d:3,n:'Masked Ace'}
-];
+var MATE_DMG = 1;
 var STAR_DMG = 5, START_HP = 20, STEP = 4.85;
 var wById = {}; W.forEach(function (w) { wById[w.id] = w; });
 
@@ -195,8 +188,8 @@ function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = rand(0, i); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
 
 /* ---------- save ---------- */
-var KEY = 'wcg_save_v1';
-var save = {copies:{mako:1}, active:'mako', wins:0, losses:0, draws:0};
+var KEY = 'wcg_save_v2';
+var save = {copies:{roman:1}, active:'roman', wins:0, losses:0, draws:0};
 try {
   var raw = localStorage.getItem(KEY);
   if (raw) { var o = JSON.parse(raw); if (o && o.copies) { for (var k in o) save[k] = o[k]; } }
@@ -205,7 +198,7 @@ function persist() { try { localStorage.setItem(KEY, JSON.stringify(save)); } ca
 function fixActive() {
   if (!save.copies[save.active]) {
     var first = W.filter(function (w) { return save.copies[w.id]; })[0];
-    if (!first) { save.copies.mako = 1; first = W[0]; }
+    if (!first) { save.copies.roman = 1; first = W[0]; }
     save.active = first.id;
   }
 }
@@ -234,11 +227,11 @@ window.addEventListener('orientationchange', function () { setTimeout(fit, 150);
 /* ---------- cards ---------- */
 var uid = 0;
 function mk(base) { base.uid = ++uid; return base; }
-function starCard(w) { return mk({star:true, dmg:STAR_DMG, name:w.name, hue:w.hue, init:w.init}); }
+function starCard(w) { return mk({star:true, dmg:STAR_DMG, name:w.short, hue:w.hue, init:w.init, img:w.img}); }
 function buildHand(w, copies) {
   var cards = [];
   for (var i = 0; i < copies; i++) cards.push(starCard(w));
-  MATES.slice(copies - 1).forEach(function (m) { cards.push(mk({star:false, dmg:m.d, name:m.n, hue:0, init:m.n.charAt(0)})); });
+  for (var j = 0; j < 8 - copies; j++) cards.push(mk({star:false, dmg:MATE_DMG, name:w.mate, hue:0, init:w.mate.charAt(0)}));
   return shuffle(cards);
 }
 function cardVars(c) {
@@ -255,6 +248,7 @@ function mkEl(c, w, h, back) {
   e.className = 'card' + (back ? ' back' : '');
   e.style.cssText = cardVars(c) + ';width:' + w + 'px;height:' + h + 'px';
   e.innerHTML = faceHTML(c);
+  if (c.img) { e.classList.add('ph'); e.style.background = 'linear-gradient(transparent 60%,rgba(8,10,18,.9)),url(' + c.img + ') center top/cover no-repeat'; }
   return e;
 }
 
@@ -293,7 +287,7 @@ $('goColl').onclick = function () { show('coll'); };
 $('collBack').onclick = function () { show('home'); };
 $('tAdd').onclick = function () { save.copies[save.active] = Math.min(8, (save.copies[save.active] || 0) + 1); persist(); renderColl(); };
 $('tAll').onclick = function () { W.forEach(function (w) { if (!save.copies[w.id]) save.copies[w.id] = 1; }); persist(); renderColl(); };
-$('tReset').onclick = function () { save = {copies:{mako:1}, active:'mako', wins:0, losses:0, draws:0}; persist(); renderColl(); };
+$('tReset').onclick = function () { save = {copies:{roman:1}, active:'roman', wins:0, losses:0, draws:0}; persist(); renderColl(); };
 
 /* ---------- match ---------- */
 var M = null;
